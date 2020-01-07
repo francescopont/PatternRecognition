@@ -1,0 +1,6368 @@
+%!PS-Adobe-1.0
+%%Title: doc.dvi
+%%Creator: dvi2ps
+%%EndComments
+%! 
+% The following defines procedures assumed and used by program "dvi2ps"
+%
+% $Header: tex.pro,v 1.3 88/05/29 16:17:21 pallas Exp $
+%
+% Original By:  Neal Holtz, Carleton University, Ottawa, Canada
+%		<holtz@cascade.carleton.cdn>
+%		<holtz%cascade.carleton.cdn@ubc.csnet>
+%		June, 1985
+% Seriously hacked by Van Jacobson, LBL
+%		<van@lbl-csam.arpa>
+% Modifications by Glenn Trewitt, Stanford
+%		<trewitt@miasma.stanford.edu>
+% (incorporated by Joe Pallas, Stanford <pallas@pescadero.stanford.edu>)
+
+% To convert this file into a downloaded file instead of a header
+% file, uncomment all of the lines beginning with %-%
+
+%-%0000000 			% Server loop exit password
+%-%serverdict begin exitserver
+%-%  systemdict /statusdict known
+%-%  {statusdict begin 9 0 3 setsccinteractive /waittimeout 300 def end}
+%-% if
+
+/TeXDict 200 dict def   % define a working dictionary
+TeXDict begin           % start using it.
+                        % units are in "dots" (Resolution/inch)
+
+%%%%%%%%%%%%%%%%%%%%% Page setup (user) options %%%%%%%%%%%%%%%%%%%%%%%%
+
+% dvi2ps will output coordinates in the TeX coordinate system:
+%	(0,0) is 1" down and in from top left, with y +ive downward
+%	1 unit/device-pixel
+% The default PostScript coordinate system is:
+%	(0,0) at bottom left, y +ive up, 72 units/inch
+
+%  The following code was extensively hacked over to make it more or less
+%  device independent, and to NOT use initgraphics and setmatrix, which make it
+%  difficult or impossible to include a PS file in another.  The general idea
+%  is that, for each page size, we create a transformation matrix "Mtrx" that
+%  can be concat-ed with the CTM (in @bop1).
+
+%  Dvi2ps is now responsible for emitting the following, but we also do it here
+%  for compatibility with older versions
+/Resolution 300 def		% units are in pixels
+
+%  We keep the current "normal" matrix here BEFORE we do the DVI transform
+%  for each page.  Updated at the beginning of each page; used by @special.
+/DefaultMatrix matrix def
+
+/Inch  {Resolution mul} def	% converts inches to number of pixels
+
+% KLUDGE ---  To get around lack of letter, note, and legal on QMS printers
+%	YUCK!!!	   wood@cascade
+%		
+/letter where {pop} {/letter{}def} ifelse
+/legal  where {pop} {/legal {}def} ifelse
+/note   where {pop} {/note  {}def} ifelse
+
+%  The page selection operators used to be called here.  Very wrong:
+%  On some printers (such as LaserWriter) these operators clear the
+%  framebuffer and initialize the graphics state.  If dvi2ps output is
+%  included in another PostScript document, or if a prolog/trailer is
+%  wrapped around it, things would be totally screwed -- the pre-existing
+%  image would be lost and the preset graphics state would be lost.
+%
+%  These operators (note, letter, legal) do different things on different
+%  printers -- the LaserWriter clears the frambuffer and does an
+%  initgraphics, while other printers merely choose a paper tray.
+%  
+%  Page selection is properly done by a print manager (the spooler, in the
+%  case of UN*X), and should come at the start of the whole document.
+%
+%  Because of these facts, I've commented the page selection operators out.
+/@letter
+  { %letter
+    72 Resolution div dup neg matrix scale	% set scaling to 1/pixel
+    /Mtrx exch def
+    Mtrx 4 72 put    Mtrx 5 720 put		%  origin to top-left
+  } def
+
+        % note mode is like letter, except it uses less VM
+/@note
+  { %note
+    72 Resolution div dup neg matrix scale	% set scaling to 1/pixel
+    /Mtrx exch def
+    Mtrx 4 72 put    Mtrx 5 720 put		%  origin to top-left
+  } def
+
+/@landscape
+  { %letter
+    [ 0 72 Resolution div dup 0 72 72 ]		% set scaling to 1/pixel
+    /Mtrx exch def				%  and origin to top-left
+  } def
+
+/@legal
+  { %legal
+    72 Resolution div dup neg matrix scale	% set scaling to 1/pixel
+    /Mtrx exch def
+    Mtrx 4 72 put    Mtrx 5 936 put		%  origin to top-left
+  } def
+
+/@manualfeed
+   { statusdict /manualfeed true put
+   } def
+
+% n @copies -   set number of copies
+/@copies
+   { /#copies exch def
+   } def
+
+%%%%%%%%%%%%%%%%%%%% Procedure Defintions %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% id @newfont -		initialize a new font dictionary
+/@newfont
+  { /newname exch def
+    newname 7 dict def          % allocate new font dictionary
+    newname load begin
+        /FontType 3 def
+        /FontMatrix [1 0 0 -1 0 0] def
+        /FontBBox [0 0 1 1] def
+        /BitMaps 128 array def
+        /BuildChar {CharBuilder} def
+        /Encoding 128 array def
+        0 1 127 {Encoding exch /.undef put} for
+        end
+    newname newname load definefont pop
+  } def
+
+
+% the following is the only character builder we need.  it looks up the
+% char data in the BitMaps array, and paints the character if possible.
+% char data  -- a bitmap descriptor -- is an array of length 6, of 
+%          which the various slots are:
+
+/ch-image {ch-data 0 get} def   % the hex string image
+/ch-width {ch-data 1 get} def   % the number of pixels across
+/ch-height {ch-data 2 get} def  % the number of pixels tall
+/ch-xoff  {ch-data 3 get} def   % number of pixels below origin
+/ch-yoff  {ch-data 4 get} def   % number of pixels to left of origin
+/ch-tfmw  {ch-data 5 get} def   % spacing to next character
+
+% fontdict ch Charbuilder -     -- image one character
+/CharBuilder
+  { /ch-code exch def           % save the char code
+    /font-dict exch def         % and the font dict.
+    /ch-data font-dict /BitMaps get ch-code get def   % get the bitmap
+    ch-data null eq not {
+	ch-tfmw 0 ch-xoff neg ch-yoff neg
+	ch-width ch-xoff sub ch-height ch-yoff sub
+	setcachedevice
+        ch-width ch-height true [1 0  0 1  ch-xoff ch-yoff]
+	{ch-image} imagemask
+    } if
+} def
+
+
+% fontdict @sf -        -- make that the current font
+/@sf { setfont } def
+
+% in the following, the font-cacheing mechanism requires that
+% a name unique in the particular font be generated
+
+% char-data ch @dc -    -- define a new character bitmap in current font
+/@dc
+  { /ch-code exch def
+    dup 0 get
+    length 2 lt
+      { pop [ <00> 1 1 0 0 8.00 ] } % replace <> with null
+    if
+    /ch-data exch def
+    currentfont /BitMaps get ch-code ch-data put
+    % generate a unique name simply from the character code
+    currentfont /Encoding get ch-code dup (   ) cvs cvn put
+  } def
+
+/@DRAFTF { gsave newpath
+       /Helvetica-Bold findfont setfont
+       (Draft) dup stringwidth pop 8.875 exch div dup 72 mul dup scale
+       52.3 rotate 2.5 exch div -.35 translate
+       0.95 setgray
+       0 0 moveto show
+       grestore } def
+/@DRAFTM { gsave newpath
+       /Helvetica-Bold findfont 72 scalefont setfont
+       0.95 setgray
+       576 702 moveto
+       (Draft) stringwidth exch neg exch neg rmoveto
+       (Draft) show
+       grestore } def
+
+% n @bop0 -              -- begin the char def section of a new page
+/@bop0 { pop } def
+
+% n @bop1 -              -- begin a brand new page
+/@bop1 { pop
+	DefaultMatrix currentmatrix pop	% save it away
+	/SaveImage save def
+	Mtrx concat } def
+
+/@draft {
+    /@bop1
+	  { DefaultMatrix currentmatrix pop
+	    1 le {@DRAFTF} {@DRAFTM} ifelse
+	    /SaveImage save def
+	    Mtrx concat
+	  } def
+} def
+
+% - @eop -              -- end a page
+/@eop { SaveImage restore showpage } def
+
+% - @start -            -- start everything
+/@start { @letter /@TeXSave save def } def
+
+% - @end -              -- done the whole shebang
+/@end { end } def
+
+% x y p -               -- move to position
+/p { moveto } bind def
+
+% x r -                 -- move right
+/r { 0 rmoveto } bind def
+
+% string s -            -- show the string
+/s { show } bind def
+
+% x string m -            -- move right then show string
+/m { exch 0 rmoveto show } bind def
+
+% ch c -                -- show the character (code given)
+/c { c-string dup 0 4 -1 roll put show } bind def
+
+/c-string ( ) def
+
+% dx dy ru -   -- set a rule (rectangle)
+/ru
+  { /dy exch neg def    % because dy is height up from bottom
+    /dx exch def
+    /x currentpoint /y exch def def   % remember current point
+    newpath x y moveto
+    dx 0 rlineto
+    0 dy rlineto
+    dx neg 0 rlineto
+    closepath fill
+    x y moveto
+  } bind def
+
+/@MacSetUp
+  { userdict /md known  % if md is defined
+      { userdict /md get type /dicttype eq      % and if it is a dictionary
+	{
+	/MacDrwgs true def
+	md begin                             % then redefine some stuff
+	/letter {} def
+	/note {} def
+	/legal {} def
+	/od{txpose
+	    1 0 mtx defaultmatrix dtransform exch atan/pa exch def
+	    newpath clippath mark
+	    {transform{itransform moveto}}
+	    {transform{itransform lineto}}
+	    { 6 -2 roll transform
+	      6 -2 roll transform
+	      6 -2 roll transform
+	      { itransform 6 2 roll
+		itransform 6 2 roll
+		itransform 6 2 roll
+		curveto
+	      }
+	    }
+	    {{closepath}}
+	    pathforall newpath counttomark array astore /gc xdf
+	    pop ct 39 0 put
+	    10 fz 0 fs 2 F/|______Courier fnt invertflag{PaintBlack}if
+	}def
+	/txpose{
+	    pxs pys scale ppr aload pop
+	    por {
+		noflips {
+		    pop exch neg exch translate pop 1 -1 scale
+		}if
+		xflip yflip and {
+		    pop exch neg exch translate 180 rotate 1 -1 scale
+		    ppr 3 get ppr 1 get neg sub neg ppr 2 get
+		    ppr 0 get neg sub neg translate
+		}if 
+		xflip yflip not and {
+		    pop exch neg exch translate pop 180 rotate
+		    ppr 3 get ppr 1 get neg sub neg 0 translate
+		}if
+		yflip xflip not and {
+		    ppr 1 get neg ppr 0 get neg translate
+		}if
+	    }
+	    {
+		noflips {
+		    translate pop pop 270 rotate 1 -1 scale
+		}if
+		xflip yflip and {
+		    translate pop pop 90 rotate 1 -1 scale
+		    ppr 3 get ppr 1 get neg sub neg ppr 2 get
+		    ppr 0 get neg sub neg translate
+		}if
+		xflip yflip not and {
+		    translate pop pop 90 rotate ppr 3 get
+		    ppr 1 get neg sub neg 0 translate
+		}if
+		yflip xflip not and {
+		    translate pop pop 270 rotate ppr 2 get
+		    ppr 0 get neg sub neg 0 exch translate
+		}if
+	    }ifelse
+	    scaleby96 {
+		ppr aload pop 4 -1 roll add 2 div 3 1 roll add 2 div 2 copy
+		translate .96 dup scale neg exch neg exch translate
+	    }if
+	}def
+	/cp {pop pop showpage pm restore}def
+        end
+      }if
+    } if    
+  } def
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%     the \special command junk
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   The structure of the PostScript produced by dvi2ps for \special is:
+%         @beginspecial
+%           - any number of @hsize, @hoffset, @hscale, etc., commands
+%         @setspecial
+%           - the users file of PostScript commands
+%         @endspecial
+
+% The @beginspecial command recognizes whether the Macintosh Laserprep
+% has been loaded or not, and redfines some Mac commands if so.
+% The @setspecial handles the users shifting, scaling, clipping commands
+
+
+% The following are user settable options from the \special command.
+
+/@SpecialDefaults
+  { /hs 8.5 Inch def
+    /vs 11 Inch def
+    /ho 0 def
+    /vo 0 def
+    /hsc 1 def
+    /vsc 1 def
+    /CLIP false def
+  } def
+
+%       d @hsize -      specify a horizontal clipping dimension
+%                       these 2 are executed before the MacDraw initializations
+/@hsize {/hs exch def /CLIP true def} def
+/@vsize {/vs exch def /CLIP true def} def
+%       d @hoffset -    specify a shift for the drwgs
+/@hoffset {/ho exch def} def
+/@voffset {/vo exch def} def
+%       s @hscale -     set scale factor
+/@hscale {/hsc exch def} def
+/@vscale {/vsc exch def} def
+
+/@setclipper
+  { hsc vsc scale
+    CLIP
+      { newpath 0 0 moveto hs 0 rlineto 0 vs rlineto hs neg 0 rlineto closepath clip }
+    if
+  } def
+
+% this will be invoked as the result of a \special command (for the
+% inclusion of PostScript graphics).  The basic idea is to change all
+% scaling and graphics back to defaults that were restored by the most
+% recent showpage, but to shift the origin to the current position on the
+% page.  
+%
+% We draw the figure at the current location.
+
+/@beginspecial          % - @beginspecial -     -- enter special mode
+  {
+    /SpecialSave save def
+    /showpage {} def		% prevent showpage from working
+          % the following magic incantation establishes the current point as
+          % the users origin, and reverts back to default scalings, rotations
+    currentpoint transform	% device coords of CP
+    DefaultMatrix setmatrix	% back to "normal" CTM
+    itransform translate	% move to CP
+    @SpecialDefaults    % setup default offsets, scales, sizes
+    @MacSetUp           % fix up Mac stuff 
+  } def
+
+/@setspecial    % to setup user specified offsets, scales, sizes (for clipping)
+  {
+    MacDrwgs
+      {md begin /pxt ho def /pyt vo neg def end}
+      {ho vo translate @setclipper}
+    ifelse
+  } def
+
+/@endspecial            % - @endspecial -       -- leave special mode
+  {
+    SpecialSave restore
+  } def
+
+/MacDrwgs false def     % will get set if we think the Mac LaserPrep file has been loaded
+
+%!
+% All software, documentation, and related files in this distribution of
+% psfig/tex are Copyright (c) 1987 Trevor J. Darrell
+%
+% Permission is granted for use and non-profit distribution of psfig/tex 
+% providing that this notice be clearly maintained, but the right to
+% distribute any portion of psfig/tex for profit or as part of any commercial
+% product is specifically reserved for the author.
+%
+%
+% psfigTeX PostScript Prolog
+% $Header: tex.pro,v 1.3 88/05/29 16:17:21 pallas Exp $
+%
+/psf$TeXscale { 65536 div } def
+
+% Changed to use DefaultMatrix instead of currentmatrix
+/DocumentInitState [ /DefaultMatrix cvx currentlinewidth currentlinecap
+currentlinejoin currentdash currentgray currentmiterlimit ] cvx def
+
+%  x y bb-llx bb-lly bb-urx bb-ury startFig -
+/startTexFig {
+	/psf$SavedState save def
+	userdict maxlength dict begin
+	currentpoint transform
+
+	DocumentInitState setmiterlimit setgray setdash setlinejoin setlinecap
+		setlinewidth setmatrix
+
+	itransform moveto
+
+	/psf$ury exch psf$TeXscale def
+	/psf$urx exch psf$TeXscale def
+	/psf$lly exch psf$TeXscale def
+	/psf$llx exch psf$TeXscale def
+	/psf$y exch psf$TeXscale def
+	/psf$x exch psf$TeXscale def
+	
+	currentpoint /psf$cy exch def /psf$cx exch def
+
+	/psf$sx psf$x psf$urx psf$llx sub div def 	% scaling for x
+	/psf$sy psf$y psf$ury psf$lly sub div def	% scaling for y
+
+	psf$sx psf$sy scale			% scale by (sx,sy)
+
+	psf$cx psf$sx div psf$llx sub
+	psf$cy psf$sy div psf$ury sub translate
+	
+	/DefFigCTM matrix currentmatrix def
+
+	/initmatrix {
+		DefFigCTM setmatrix
+	} def
+	/defaultmatrix {
+		DefFigCTM exch copy
+	} def
+
+	/initgraphics {
+		DocumentInitState setmiterlimit setgray setdash 
+			setlinejoin setlinecap setlinewidth setmatrix
+		DefFigCTM setmatrix
+	} def
+
+	/showpage {
+		initgraphics
+	} def
+	@MacSetUp
+} def
+
+% llx lly urx ury doclip -	(args in figure coordinates)
+/doclip {
+	currentpoint 6 2 roll
+	newpath 4 copy
+	4 2 roll moveto
+	6 -1 roll exch lineto
+	exch lineto
+	exch lineto
+	closepath clip
+	newpath
+	moveto
+} def
+
+% - endTexFig -
+/endTexFig { end psf$SavedState restore } def
+
+
+%%%% Additions by LA Carr to reencode Adobe fonts as TeX fonts (almost)
+%%%% Based on routine in LaserWriter Cookbook
+/ReEncodeForTeX
+  { /newfontname exch def
+    /basefontname exch def
+    /TeXstr 30 string def
+
+    /basefontdict basefontname findfont def
+    /newfont basefontdict maxlength dict def
+    basefontdict
+      { exch dup /FID ne
+	  { dup /Encoding eq
+	    { exch dup length array copy
+	        newfont 3 1 roll put }
+	    { exch newfont 3 1 roll put }
+	    ifelse
+	  }
+	{ pop pop }
+	ifelse
+      } forall
+
+      basefontdict /MathFontName known not
+        { 
+	  /TeXvec basefontname TeXstr cvs (Courier) search
+	    { pop pop pop TeXcourvec }
+	    { pop TeXnormalvec }
+	  ifelse def
+          TeXvec aload pop
+
+          TeXvec length 2 idiv
+	    { newfont /Encoding get 3 1 roll put }
+	  repeat
+	}
+      if
+
+      newfontname newfont definefont pop
+  } def
+
+/TeXnormalvec
+	[ 8#014 /fi 8#015 /fl 8#020 /dotlessi 8#022 /grave 8#023 /acute
+	  8#024 /caron 8#025 /breve 8#026 /macron 8#027 /ring 8#030 /cedilla
+	  8#031 /germandbls 8#032 /ae 8#033 /oe 8#034 /oslash 8#035 /AE
+	  8#036 /OE 8#037 /Oslash 8#042 /quotedblright 8#074 /exclamdown
+	  8#076 /questiondown 8#134 /quotedblleft 8#136 /circumflex
+	  8#137 /dotaccent 8#173 /endash 8#174 /emdash 8#175 /hungarumlat
+	  8#176 /tilde 8#177 /dieresis ] def
+/TeXcourvec
+	[ 8#016 /exclamdown 8#017 /questiondown 8#020 /dotlessi 8#022 /grave
+	  8#023 /acute 8#024 /caron 8#025 /breve 8#026 /macron 8#027 /ring
+	  8#030 /cedilla 8#031 /germandbls 8#032 /ae 8#033 /oe 8#034 /oslash
+	  8#035 /AE 8#036 /OE 8#037 /Oslash 8#074 /less 8#076 /greater
+	  8#134 /backslash 8#136 /circumflex 8#137 /underscore 8#173 /braceleft
+	  8#174 /bar 8#175 /braceright 8#177 /dieresis ] def
+
+/TeXPSmakefont {	% defines a routine for generating PS fonts, fudged!
+	/TeXsize exch def findfont 
+	[ TeXsize 0 0 TeXsize neg 0 0 ] makefont
+} def
+
+% fontname basefontname angle ObliqueFont -
+% Create a General Oblique font
+/ObliqueFont {
+    /ObliqueAngle exch def
+    /ObliqueBaseName exch def
+    /ObliqueFontName exch def
+    /ObliqueTransform [1 0 ObliqueAngle sin ObliqueAngle cos div 1 0 0] def
+    /basefontdict ObliqueBaseName findfont ObliqueTransform makefont def
+    /newfont basefontdict maxlength dict def
+    basefontdict
+      { exch dup /FID ne
+	  { dup /Encoding eq
+	    { exch dup length array copy
+	        newfont 3 1 roll put }
+	    { exch newfont 3 1 roll put }
+	    ifelse
+	  }
+	{ pop pop }
+	ifelse
+      } forall
+
+     newfont /FontName ObliqueFontName put
+     ObliqueFontName newfont definefont
+     pop
+} def
+
+% Palatino-ItalicUnslanted? You must be joking!
+
+% fontname basename SmallCapsFont -	Create a General SmallCaps font
+/SmallCapsFont {
+    /SmallCapsBaseName exch def
+    /SmallCapsFontName exch def
+    /basefontdict SmallCapsBaseName findfont def
+    /newfont basefontdict maxlength 10 add dict def
+
+    newfont begin
+	/FontName SmallCapsFontName def
+	/FontBaseDict basefontdict 1000 scalefont def
+	/FontSCDict FontBaseDict .8 scalefont def
+	/FontType 3 def
+	/BuildChar {SmallCapChar} def
+	/FontMatrix dup basefontdict exch get def
+	/FontBBox dup basefontdict exch get def
+	/Encoding dup basefontdict exch get def
+    end
+    SmallCapsFontName newfont definefont pop
+} def
+
+% fontdict ch SmallCapChar -
+% It shouldn't be so damn hard to do this (make one font out
+% of two others) but I tried several dozen variations on this
+% theme until I found something that worked. -- vj
+/SmallCapChar {
+    /achar (A) def
+    achar exch 0 exch put
+    begin
+    achar 0 get dup 97 ge exch 122 le and {
+	% handle 'a' through 'z' specially
+	achar 0 achar 0 get 32 sub put
+	FontSCDict
+    } {
+	FontBaseDict
+    } ifelse
+    setfont achar stringwidth FontBBox setcachedevice
+    newpath 0 0 moveto achar show
+    end
+} def
+
+/MathEncodingVec [
+/Gamma /Delta /Theta /Lambda /Xi /Pi /Sigma /Upsilon1
+/Phi /Psi /Omega /alpha /beta /gamma /delta /epsilon
+/zeta /nu /theta /iota /kappa /lambda /mu /nu
+/xi /pi /rho /sigma /tau /upsilon /phi /chi
+/psi /omega /epsilon /theta1 /omega1 /rho /sigma /phi1
+/arrowleft /arrowleft /arrowright /arrowright
+/suchthat /congruent /proportional /angle
+/zero /one /two /three /four /five /six /seven
+/eight /nine /period /comma /less /slash /greater /asteriskmath
+/partialdiff /A /B /C /D /E /F /G
+/H /I /J /K /L /M /N /O
+/P /Q /R /S /T /U /V /W
+/X /Y /Z /registerserif /copyrightserif /trademarkserif /logicalor /logicaland
+/section /a /b /c /d /e /f /g
+/h /i /j /k /l /m /n /o
+/p /q /r /s /t /u /v /w
+/x /y /z /dotlessi /j /weierstrass /macron /breve
+] def
+
+% the following gives the character codes of the above characters
+% in their font.  I.e., this is the character we have to hand "show"
+% to image the characters above.
+/MathCharVec [
+	71	68	81	76	88	80	83	161
+	70	89	87	97	98	103	100	101
+	122	110	113	105	107	108	109	110
+	120	112	114	115	116	117	102	99
+	121	119	101	74	118	114	115	106
+	172	172	174	174	39	64	181	208
+	48	49	50	51	52	53	54	55
+	56	57	46	44	60	47	62	42
+	182	65	66	67	68	69	70	71
+	72	73	74	75	76	77	78	79
+	80	81	82	83	84	85	86	87
+	88	89	90	210	211	212	218	217
+	167	97	98	99	100	101	102	103
+	104	105	106	107	108	109	110	111
+	112	113	114	115	116	117	118	119
+	120	121	122	245	106	195	197	198
+] def
+
+% this array tells which font dictionary holds each character above
+% (0 = basefont, 1 = symbol (maybe slanted), 2 = symbol (unslanted)).
+/MathDictVec [
+	1 1 1 1 1 1 1 1
+	1 1 1 1 1 1 1 1
+	1 1 1 1 1 1 1 1
+	1 1 1 1 1 1 1 1
+	1 1 1 1 1 1 1 1
+	2 2 2 2 2 2 2 2
+	0 0 0 0 0 0 0 0
+	0 0 0 0 2 2 2 2
+	2 0 0 0 0 0 0 0
+	0 0 0 0 0 0 0 0
+	0 0 0 0 0 0 0 0
+	0 0 0 2 2 2 2 2
+	2 0 0 0 0 0 0 0
+	0 0 0 0 0 0 0 0
+	0 0 0 0 0 0 0 0
+	0 0 0 0 0 2 0 0
+] def
+
+
+% fontname basename symbolname symbolbase angle MathOblique -
+% Create a "math" font with the symbol font characters slanted
+% by "angle"
+/MathOblique {
+    3 copy ObliqueFont
+    pop pop MathFont
+} def
+    
+
+% fontname basename symbolname MathFont -	Create a math italic font
+%
+% We build this font out of the base font & the symbol font
+% using an encoding vec as close as we can get to cmmi10 with
+% standard postscript characters.  An array parallel to the
+% encoding vector tells which font dictionary to use for a
+% particular character.
+/MathFont {
+    /MathSymName exch def
+    /MathBaseName exch def
+    /MathFontName exch def
+    /basefontdict MathBaseName findfont def
+    /newfont basefontdict maxlength 10 add dict def
+
+    newfont begin
+	/FontName MathFontName def
+	/FontDictArray [
+	    basefontdict 1000 scalefont
+	    MathSymName findfont 950 scalefont
+	    /Symbol findfont 950 scalefont
+	   ] def
+	/FontType 3 def
+	/BuildChar {MathFontChar} def
+	/FontMatrix dup basefontdict exch get def
+	/FontBBox dup basefontdict exch get def
+	% the encoding vector is a copy of the original font's
+	% encoding, modified "appropriately".
+	/Encoding dup basefontdict exch get dup length array copy def
+	/WhichFont MathDictVec def
+	/WhichChar MathCharVec def
+	MathEncodingVec Encoding copy pop
+	/achar (A) def
+    end
+    MathFontName newfont definefont pop
+} def
+
+% fontdict ch MathFontChar -
+% (there's some serious magic going on here:  see note on 
+% SmallCapChar above -- vj).
+/MathFontChar {
+    exch begin
+    achar exch 0 exch put
+    FontDictArray WhichFont achar 0 get get get setfont
+    achar dup 0 get WhichChar exch get 0 exch put
+    achar stringwidth FontBBox setcachedevice
+    newpath 0 0 moveto achar show
+    end
+} bind def
+
+/@flushfonts { @TeXSave restore /@TeXSave save def} def
+
+end                     % revert to previous dictionary
+
+TeXDict begin
+%%EndProlog
+/Resolution 300.000000 def
+@start
+%%Page: ? 1
+9 @bop0
+cmmi7.300 @sf
+[<3C7062D041C8C0C8C0C8C0C0606060606060306010700C7007B0> 16 13 -2 0 18.006] 97 @dc
+[<380066004300C100C180C18060C060C060C060C030C038803700300018001800180018000C007C
+  00> 16 20 -2 0 14.598] 98 @dc
+[<1E00218040404020C000C00060006000600031C010E00C400780> 16 13 -2 0 14.835] 99 @dc
+9 @bop1
+0 980 p @beginspecial
+0.500000 @hscale
+0.500000 @vscale
+0.000000 @hoffset
+-130.000000 @voffset
+@setspecial
+%!PS-Adobe-2.0 EPSF-1.2
+%%DocumentFonts: Helvetica
+%%Pages: 1
+%%BoundingBox: 68 308 576 719
+%%EndComments
+
+50 dict begin
+
+/arrowHeight 8 def
+/arrowWidth 4 def
+/none null def
+/numGraphicParameters 17 def
+/stringLimit 65535 def
+
+/Begin {
+save
+numGraphicParameters dict begin
+} def
+
+/End {
+end
+restore
+} def
+
+/SetB {
+dup type /nulltype eq {
+pop
+false /brushRightArrow idef
+false /brushLeftArrow idef
+true /brushNone idef
+} {
+/brushDashOffset idef
+/brushDashArray idef
+0 ne /brushRightArrow idef
+0 ne /brushLeftArrow idef
+/brushWidth idef
+false /brushNone idef
+} ifelse
+} def
+
+/SetCFg {
+/fgblue idef
+/fggreen idef
+/fgred idef
+} def
+
+/SetCBg {
+/bgblue idef
+/bggreen idef
+/bgred idef
+} def
+
+/SetF {
+/printSize idef
+/printFont idef
+} def
+
+/SetP {
+dup type /nulltype eq {
+pop true /patternNone idef
+} {
+/patternGrayLevel idef
+patternGrayLevel -1 eq {
+/patternString idef
+} if
+false /patternNone idef
+} ifelse
+} def
+
+/BSpl {
+0 begin
+storexyn
+newpath
+n 1 gt {
+0 0 0 0 0 0 1 1 true subspline
+n 2 gt {
+0 0 0 0 1 1 2 2 false subspline
+1 1 n 3 sub {
+/i exch def
+i 1 sub dup i dup i 1 add dup i 2 add dup false subspline
+} for
+n 3 sub dup n 2 sub dup n 1 sub dup 2 copy false subspline
+} if
+n 2 sub dup n 1 sub dup 2 copy 2 copy false subspline
+patternNone not brushLeftArrow not brushRightArrow not and and { ifill } if
+brushNone not { istroke } if
+0 0 1 1 leftarrow
+n 2 sub dup n 1 sub dup rightarrow
+} if
+end
+} dup 0 4 dict put def
+
+/Circ {
+newpath
+0 360 arc
+patternNone not { ifill } if
+brushNone not { istroke } if
+} def
+
+/CBSpl {
+0 begin
+dup 2 gt {
+storexyn
+newpath
+n 1 sub dup 0 0 1 1 2 2 true subspline
+1 1 n 3 sub {
+/i exch def
+i 1 sub dup i dup i 1 add dup i 2 add dup false subspline
+} for
+n 3 sub dup n 2 sub dup n 1 sub dup 0 0 false subspline
+n 2 sub dup n 1 sub dup 0 0 1 1 false subspline
+patternNone not { ifill } if
+brushNone not { istroke } if
+} {
+Poly
+} ifelse
+end
+} dup 0 4 dict put def
+
+/Elli {
+0 begin
+newpath
+4 2 roll
+translate
+scale
+0 0 1 0 360 arc
+patternNone not { ifill } if
+brushNone not { istroke } if
+end
+} dup 0 1 dict put def
+
+/Line {
+0 begin
+2 storexyn
+newpath
+x 0 get y 0 get moveto
+x 1 get y 1 get lineto
+brushNone not { istroke } if
+0 0 1 1 leftarrow
+0 0 1 1 rightarrow
+end
+} dup 0 4 dict put def
+
+/MLine {
+0 begin
+storexyn
+newpath
+n 1 gt {
+x 0 get y 0 get moveto
+1 1 n 1 sub {
+/i exch def
+x i get y i get lineto
+} for
+patternNone not brushLeftArrow not brushRightArrow not and and { ifill } if
+brushNone not { istroke } if
+0 0 1 1 leftarrow
+n 2 sub dup n 1 sub dup rightarrow
+} if
+end
+} dup 0 4 dict put def
+
+/Poly {
+3 1 roll
+newpath
+moveto
+-1 add
+{ lineto } repeat
+closepath
+patternNone not { ifill } if
+brushNone not { istroke } if
+} def
+
+/Rect {
+0 begin
+/t exch def
+/r exch def
+/b exch def
+/l exch def
+newpath
+l b moveto
+l t lineto
+r t lineto
+r b lineto
+closepath
+patternNone not { ifill } if
+brushNone not { istroke } if
+end
+} dup 0 4 dict put def
+
+/Text {
+ishow
+} def
+
+/idef {
+dup where { pop pop pop } { exch def } ifelse
+} def
+
+/ifill {
+0 begin
+gsave
+patternGrayLevel -1 ne {
+fgred bgred fgred sub patternGrayLevel mul add
+fggreen bggreen fggreen sub patternGrayLevel mul add
+fgblue bgblue fgblue sub patternGrayLevel mul add setrgbcolor
+eofill
+} {
+eoclip
+originalCTM setmatrix
+pathbbox /t exch def /r exch def /b exch def /l exch def
+/w r l sub ceiling cvi def
+/h t b sub ceiling cvi def
+/imageByteWidth w 8 div ceiling cvi def
+/imageHeight h def
+bgred bggreen bgblue setrgbcolor
+eofill
+fgred fggreen fgblue setrgbcolor
+w 0 gt h 0 gt and {
+l b translate w h scale
+w h true [w 0 0 h neg 0 h] { patternproc } imagemask
+} if
+} ifelse
+grestore
+end
+} dup 0 8 dict put def
+
+/istroke {
+gsave
+brushDashOffset -1 eq {
+[] 0 setdash
+1 setgray
+} {
+brushDashArray brushDashOffset setdash
+fgred fggreen fgblue setrgbcolor
+} ifelse
+brushWidth setlinewidth
+originalCTM setmatrix
+stroke
+grestore
+} def
+
+/ishow {
+0 begin
+gsave
+printFont findfont printSize scalefont setfont
+fgred fggreen fgblue setrgbcolor
+/vertoffset printSize neg def {
+0 vertoffset moveto show
+/vertoffset vertoffset printSize sub def
+} forall
+grestore
+end
+} dup 0 3 dict put def
+
+/patternproc {
+0 begin
+/patternByteLength patternString length def
+/patternHeight patternByteLength 8 mul sqrt cvi def
+/patternWidth patternHeight def
+/patternByteWidth patternWidth 8 idiv def
+/imageByteMaxLength imageByteWidth imageHeight mul
+stringLimit patternByteWidth sub min def
+/imageMaxHeight imageByteMaxLength imageByteWidth idiv patternHeight idiv
+patternHeight mul patternHeight max def
+/imageHeight imageHeight imageMaxHeight sub store
+/imageString imageByteWidth imageMaxHeight mul patternByteWidth add string def
+0 1 imageMaxHeight 1 sub {
+/y exch def
+/patternRow y patternByteWidth mul patternByteLength mod def
+/patternRowString patternString patternRow patternByteWidth getinterval def
+/imageRow y imageByteWidth mul def
+0 patternByteWidth imageByteWidth 1 sub {
+/x exch def
+imageString imageRow x add patternRowString putinterval
+} for
+} for
+imageString
+end
+} dup 0 12 dict put def
+
+/min {
+dup 3 2 roll dup 4 3 roll lt { exch } if pop
+} def
+
+/max {
+dup 3 2 roll dup 4 3 roll gt { exch } if pop
+} def
+
+/arrowhead {
+0 begin
+transform originalCTM itransform
+/taily exch def
+/tailx exch def
+transform originalCTM itransform
+/tipy exch def
+/tipx exch def
+/dy tipy taily sub def
+/dx tipx tailx sub def
+/angle dx 0 ne dy 0 ne or { dy dx atan } { 90 } ifelse def
+gsave
+originalCTM setmatrix
+tipx tipy translate
+angle rotate
+newpath
+0 0 moveto
+arrowHeight neg arrowWidth 2 div lineto
+arrowHeight neg arrowWidth 2 div neg lineto
+closepath
+patternNone not {
+originalCTM setmatrix
+/padtip arrowHeight 2 exp 0.25 arrowWidth 2 exp mul add sqrt brushWidth mul
+arrowWidth div def
+/padtail brushWidth 2 div def
+tipx tipy translate
+angle rotate
+padtip 0 translate
+arrowHeight padtip add padtail add arrowHeight div dup scale
+arrowheadpath
+ifill
+} if
+brushNone not {
+originalCTM setmatrix
+tipx tipy translate
+angle rotate
+arrowheadpath
+istroke
+} if
+grestore
+end
+} dup 0 9 dict put def
+
+/arrowheadpath {
+newpath
+0 0 moveto
+arrowHeight neg arrowWidth 2 div lineto
+arrowHeight neg arrowWidth 2 div neg lineto
+closepath
+} def
+
+/leftarrow {
+0 begin
+y exch get /taily exch def
+x exch get /tailx exch def
+y exch get /tipy exch def
+x exch get /tipx exch def
+brushLeftArrow { tipx tipy tailx taily arrowhead } if
+end
+} dup 0 4 dict put def
+
+/rightarrow {
+0 begin
+y exch get /tipy exch def
+x exch get /tipx exch def
+y exch get /taily exch def
+x exch get /tailx exch def
+brushRightArrow { tipx tipy tailx taily arrowhead } if
+end
+} dup 0 4 dict put def
+
+/midpoint {
+0 begin
+/y1 exch def
+/x1 exch def
+/y0 exch def
+/x0 exch def
+x0 x1 add 2 div
+y0 y1 add 2 div
+end
+} dup 0 4 dict put def
+
+/thirdpoint {
+0 begin
+/y1 exch def
+/x1 exch def
+/y0 exch def
+/x0 exch def
+x0 2 mul x1 add 3 div
+y0 2 mul y1 add 3 div
+end
+} dup 0 4 dict put def
+
+/subspline {
+0 begin
+/movetoNeeded exch def
+y exch get /y3 exch def
+x exch get /x3 exch def
+y exch get /y2 exch def
+x exch get /x2 exch def
+y exch get /y1 exch def
+x exch get /x1 exch def
+y exch get /y0 exch def
+x exch get /x0 exch def
+x1 y1 x2 y2 thirdpoint
+/p1y exch def
+/p1x exch def
+x2 y2 x1 y1 thirdpoint
+/p2y exch def
+/p2x exch def
+x1 y1 x0 y0 thirdpoint
+p1x p1y midpoint
+/p0y exch def
+/p0x exch def
+x2 y2 x3 y3 thirdpoint
+p2x p2y midpoint
+/p3y exch def
+/p3x exch def
+movetoNeeded { p0x p0y moveto } if
+p1x p1y p2x p2y p3x p3y curveto
+end
+} dup 0 17 dict put def
+
+/storexyn {
+/n exch def
+/y n array def
+/x n array def
+n 1 sub -1 0 {
+/i exch def
+y i 3 2 roll put
+x i 3 2 roll put
+} for
+} def
+
+%%EndProlog
+
+%I Idraw 5 Grid 8
+
+%%Page: 1 1
+
+Begin
+%I b u
+%I cfg u
+%I cbg u
+%I f u
+%I p u
+%I t
+[ 0.923077 0 0 0.923077 0 0 ] concat
+/originalCTM matrix currentmatrix def
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 77 776 ] concat
+%I
+[
+(DC Coding:)
+()
+(DPCM coding takes the difference)
+(between the DC Coefficient and the)
+(previous DC Coefficient found.)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 77 558 ] concat
+%I
+[
+(AC Coding:)
+()
+(Run-length coding creates a code out)
+(of the run length of zeroes preceding)
+(a non-zero coefficient and the number)
+(of bits of the nonzero coefficient.)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 77 683 ] concat
+%I
+[
+(DPCMCODE = DC\(t\) - DC\(t-1\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 77 432 ] concat
+%I
+[
+(CODE = Number-of-Zeroes * 16 + Number-of-Bits)
+] Text
+End
+
+Begin %I Poly
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 51 -66 ] concat
+%I 4
+80 404
+80 441
+369 441
+369 404
+4 Poly
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 114 -69 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 150 -69 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 185 -68 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 221 -68 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 258 -68 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 293 -69 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 329 -70 ] concat
+%I
+55 443 55 407 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -1 -52 ] concat
+%I
+201 465 149 409 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -1 -52 ] concat
+%I
+200 465 258 410 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -1 -52 ] concat
+%I
+346 466 294 409 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -1 -52 ] concat
+%I
+345 468 402 410 Line
+End
+
+Begin %I Poly
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 22 -84 ] concat
+%I 4
+450 423
+450 459
+584 459
+584 423
+4 Poly
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 24 -87 ] concat
+%I
+484 464 484 428 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 28 -86 ] concat
+%I
+513 460 513 425 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 34 -86 ] concat
+%I
+539 460 539 426 Line
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 476 438 ] concat
+%I
+[
+(Bits representing)
+(nonzero coefficient)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 430 549 ] concat
+%I
+[
+(From the run-length code)
+(we know the number of bits)
+(of the nonzero coefficient.)
+(Thus after the code we can)
+(transmit the bit representation)
+(of the coefficient.)
+] Text
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -1 -52 ] concat
+%I
+530 456 490 410 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -1 -52 ] concat
+%I
+529 456 589 410 Line
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 77 658 ] concat
+%I
+[
+(CODE = Number-of-Bits of DPCMCODE)
+] Text
+End
+
+Begin %I Poly
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -79 145 ] concat
+%I 4
+450 423
+450 459
+584 459
+584 423
+4 Poly
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -77 140 ] concat
+%I
+484 464 484 428 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -73 143 ] concat
+%I
+513 460 513 425 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -67 142 ] concat
+%I
+539 460 539 426 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -102 177 ] concat
+%I
+530 456 490 410 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -102 177 ] concat
+%I
+529 456 589 410 Line
+End
+
+Begin %I Poly
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -296 145 ] concat
+%I 4
+450 423
+450 459
+584 459
+584 423
+4 Poly
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -294 140 ] concat
+%I
+484 464 484 428 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -290 143 ] concat
+%I
+513 460 513 425 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+none SetP %I p n
+%I t
+[ 1 0 0 1 -284 142 ] concat
+%I
+539 460 539 426 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -319 177 ] concat
+%I
+530 456 490 410 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0 SetP
+%I t
+[ 1 0 0 1 -319 177 ] concat
+%I
+529 456 589 410 Line
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 382 658 ] concat
+%I
+[
+(Bits of DPCMCODE)
+] Text
+End
+
+End %I eop
+
+showpage
+
+%%Trailer
+
+end
+@endspecial
+t-rom.300 @sf 283 1050 p (Figure)s
+13(2.5:)m
+18(The)m
+14(coding)m
+13(model)m
+14(for)m
+13(the)m
+13(DC)m
+14(coef)m
+(\014cient)s
+13(and)m
+14(the)m
+14(AC)m
+13(coef)m
+(\014cients.)s
+cmmi10.300 @sf 578 1234 p 67 c
+cmr10.300 @sf 3 r 40 c
+t-rom.300 @sf 48 c
+cmmi10.300 @sf 59 c
+t-rom.300 @sf 7 r 48 c
+cmr10.300 @sf 41 c
+cmmi7.300 @sf 704 1240 p 107 c
+cmr10.300 @sf 734 1234 p 61 c
+cmmi10.300 @sf 12 r 68 c
+1 r 80 c
+6 r 67 c
+3 r 77 c
+5 r 67 c
+3 r 79 c
+1 r 68 c
+1 r 69 c
+cmmi7.300 @sf 1056 1240 p 107 c
+cmr10.300 @sf 1085 1234 p 43 c
+cmmi10.300 @sf 9 r 67 c
+cmr10.300 @sf 3 r 40 c
+t-rom.300 @sf 48 c
+cmmi10.300 @sf 59 c
+t-rom.300 @sf 7 r 48 c
+cmr10.300 @sf 41 c
+cmmi7.300 @sf 1252 1240 p 107 c
+cmsy7.300 @sf 1 r 0 c
+t-rom.210 @sf 49 c
+cmr10.300 @sf 1804 1234 p 40 c
+t-rom.300 @sf 50 c
+cmmi10.300 @sf 58 c
+t-rom.300 @sf 57 c
+cmr10.300 @sf 41 c
+t-rom.300 @sf 62 1308 p (After)s
+12(calculation)m
+11(of)m
+12(the)m
+12(DPCM)m
+12(code,)m
+13(the)m
+12(actual)m
+12(DC)m
+12(code)m
+13(is)m
+12(then)m
+11(given)m
+12(by)m
+11(the)m
+12(size)m
+13(of)m
+12(bits)m
+11(of)m
+12(the)m
+12(DPCM)m
+11(code)m
+0 1358 p (followed)s
+12(by)m
+14(the)m
+13(signi\014cant)m
+13(bits)m
+13(of)m
+13(the)m
+14(DPCM)m
+13(code.)m
+62 1408 p (The)s
+17(quantized)m
+15(AC)m
+16(coef)m
+(\014cients)s
+16(usually)m
+15(contain)m
+15(runs)m
+16(of)m
+15(consecutive)m
+17(zeroes.)m
+26(Therefore,)m
+18 r 97 c
+16(coding)m
+15(advantage)m
+0 1458 p (can)s
+18(be)m
+18(obtained)m
+17(by)m
+17(using)m
+17 r 97 c
+18(run-length)m
+16(technique)m
+17(where)m
+18(the)m
+18(upper)m
+17(nybble)m
+17(of)m
+17(the)m
+18(run-length)m
+15(code)m
+18(byte)m
+18(is)m
+17(the)m
+0 1508 p (number)s
+15(of)m
+14(consecutive)m
+15(zeroes)m
+15(before)m
+15(the)m
+14(next)m
+15(coef)m
+(\014cient)s
+14(and)m
+15(the)m
+14(lower)m
+14(nybble)m
+14(of)m
+14(the)m
+15(code)m
+15(byte)m
+14(is)m
+14(the)m
+15(number)m
+0 1557 p (of)s
+13(signi\014cant)m
+13(bits)m
+13(of)m
+13(the)m
+14(next)m
+13(coef)m
+(\014cient.)s
+62 1607 p (Following)s
+11(the)m
+12(code)m
+13(byte)m
+12(is)m
+13(the)m
+12(signi\014cant)m
+12(bits)m
+12(of)m
+12(the)m
+12(next)m
+13(coef)m
+(\014cient,)s
+12(the)m
+13(length)m
+11(of)m
+13(which)m
+12(can)m
+13(be)m
+13(determined)m
+0 1657 p (by)s
+13(the)m
+12(lower)m
+13(nybble)m
+12(of)m
+13(the)m
+13(code)m
+13(byte)m
+t-rom.210 @sf 627 1643 p 51 c
+t-rom.300 @sf 643 1657 p 46 c
+19(Both)m
+12(AC)m
+12(coef)m
+(\014cient)s
+13(and)m
+13(DC)m
+13(coef)m
+(\014cient)s
+12(coding)m
+12(models)m
+13(are)m
+14(illustrated)m
+11(in)m
+0 1707 p (\014gure)s
+14(2.5.)m
+t-bol.420 @sf 0 1847 p (2.7)s
+58(Lossless)m
+20(Coding)m
+t-rom.300 @sf 0 1939 p (Some)s
+14(applications)m
+11(require)m
+13(perfect)m
+13(reconstruction)m
+12(of)m
+13(the)m
+13(original)m
+11(signal,)m
+13(such)m
+13(as)m
+14(medical)m
+13(and)m
+13(multiple-generation)m
+0 1989 p (reproductions.)s
+17(This)m
+14(is)m
+13(provided)m
+13(by)m
+13(JPEG')m
+-1 r 115 c
+13(lossless)m
+14(mode.)m
+62 2039 p (The)s
+16(method)m
+15(used)m
+15(by)m
+15(JPEG)m
+15(to)m
+15(provide)m
+14(lossless)m
+15(coding)m
+14(is)m
+15(nearest)m
+16(neighbor)m
+14(prediction)m
+13(followed)m
+14(by)m
+15(Huf)m
+(fman)s
+0 2089 p (coding.)s
+20(The)m
+16(nearest)m
+15(neighbors)m
+13(are)m
+16(the)m
+14(previous)m
+14(pel,)m
+cmmi10.300 @sf 15 r 82 c
+cmmi7.300 @sf 931 2095 p 97 c
+t-rom.300 @sf 950 2089 p 44 c
+15(or)m
+15(the)m
+14(pel)m
+15(on)m
+14(the)m
+14(previous)m
+14(line)m
+14(right)m
+13(above)m
+15(it)m
+cmmi10.300 @sf 13 r 82 c
+cmmi7.300 @sf 1788 2095 p 98 c
+t-rom.300 @sf 1805 2089 p 44 c
+15(and)m
+0 2138 p (the)s
+14(pel)m
+13(on)m
+13(the)m
+14(previous)m
+13(line)m
+13(and)m
+14(to)m
+13(the)m
+13(left,)m
+cmmi10.300 @sf 14 r 82 c
+cmmi7.300 @sf 778 2144 p 99 c
+t-rom.300 @sf 794 2138 p 46 c
+19(This)m
+14(location)m
+12(diagram)m
+14(is)m
+14(shown)m
+13(below)m
+c-med.300 @sf 75 2230 p 67 c
+25 r 66 c
+75 2280 p 65 c
+25 r 120 c
+t-rom.300 @sf 62 2371 p (There)s
+15(are)m
+14(seven)m
+15(dif)m
+(ferent)s
+12(predictors)m
+13(that)m
+13(can)m
+14(be)m
+14(used.)m
+0 2406 p 756 2 ru
+t-rom.180 @sf 45 2435 p 51 c
+t-rom.240 @sf 60 2446 p (The)s
+10(decoding)m
+9(of)m
+11 r 97 c
+11(run-length)m
+9(code)m
+10(is)m
+11 r 97 c
+11(bit)m
+11(complicated.)m
+33 2485 p (The)s
+10(inverse)m
+9(run-length)m
+9(coder)m
+9(translates)m
+10(the)m
+10(input)m
+10(coded)m
+8(stream)m
+10(into)m
+10(an)m
+10(output)m
+9(array)m
+10(of)m
+10(AC)m
+10(coef)m
+(\014cients.)s
+14(It)m
+10(takes)m
+10(current)m
+9(code)m
+10(and)m
+9(appends)m
+0 2525 p 97 c
+10(number)m
+8(of)m
+9(zeroes)m
+9(to)m
+9(the)m
+10(output)m
+8(array)m
+9(corresponding)m
+7(to)m
+10(the)m
+9(upper)m
+8(nybble)m
+9(of)m
+9(the)m
+9(run-length)m
+9(code.)m
+13(The)m
+9(next)m
+9(coef)m
+(\014cient)s
+9(placed)m
+8(into)m
+9(the)m
+10(output)m
+0 2564 p (array)s
+12(is)m
+12(has)m
+12 r 97 c
+12(bit)m
+13(signi\014cance)m
+11(determined)m
+11(by)m
+12(the)m
+12(lower)m
+12(nybble)m
+11(of)m
+12(the)m
+12(run-length)m
+11(code,)m
+12(and)m
+11 r 97 c
+12(value)m
+12(determined)m
+11(by)m
+11(that)m
+13(number)m
+11(of)m
+12(trailing)m
+0 2604 p (bits.)s
+t-rom.300 @sf 934 2758 p 57 c
+@eop
+%%Page: ? 2
+10 @bop0
+cmmi7.300 @sf
+[<71C0CA20E610C60806080600030003004300430C238E13CE0E3C> 16 13 -1 0 18.824] 120 @dc
+/Times-Bold /t-bol.360 ReEncodeForTeX /t-bol.360 /t-bol.360 49.813200 TeXPSmakefont def
+/cmsy8.300 @newfont
+cmsy8.300 @sf
+[<001FE000007FF80001E01E00078007800E0001C01C0000E0380000703000003070000038600000
+  18E000001CC000000CC000000CC000000CC000000CC000000CC000000CC000000CE000001C6000
+  00187000003830000030380000701C0000E00E0001C00780078001E01E00007FF800001FE000> 32 29 -2 6 35.284] 13 @dc
+10 @bop1
+cmsy10.300 @sf 62 18 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 24 p 120 c
+cmr10.300 @sf 163 18 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 239 24 p 97 c
+cmsy10.300 @sf 62 101 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 107 p 120 c
+cmr10.300 @sf 163 101 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 239 107 p 98 c
+cmsy10.300 @sf 62 184 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 190 p 120 c
+cmr10.300 @sf 163 184 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 239 190 p 99 c
+cmsy10.300 @sf 62 267 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 273 p 120 c
+cmr10.300 @sf 163 267 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 239 273 p 97 c
+cmr10.300 @sf 267 267 p 43 c
+cmmi10.300 @sf 10 r 82 c
+cmmi7.300 @sf 341 273 p 98 c
+cmsy10.300 @sf 366 267 p 0 c
+cmmi10.300 @sf 10 r 82 c
+cmmi7.300 @sf 440 273 p 99 c
+cmsy10.300 @sf 62 350 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 356 p 120 c
+cmr10.300 @sf 163 350 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 239 356 p 97 c
+cmr10.300 @sf 267 350 p 43 c
+10(\(\()m
+cmmi10.300 @sf 82 c
+cmmi7.300 @sf 373 356 p 98 c
+cmsy10.300 @sf 399 350 p 0 c
+cmmi10.300 @sf 9 r 82 c
+cmmi7.300 @sf 472 356 p 99 c
+cmr10.300 @sf 489 350 p 41 c
+cmmi10.300 @sf 61 c
+t-rom.300 @sf 50 c
+cmr10.300 @sf 41 c
+cmsy10.300 @sf 62 433 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 439 p 120 c
+cmr10.300 @sf 163 433 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 239 439 p 98 c
+cmr10.300 @sf 264 433 p 43 c
+10(\(\()m
+cmmi10.300 @sf 82 c
+cmmi7.300 @sf 370 439 p 97 c
+cmsy10.300 @sf 399 433 p 0 c
+cmmi10.300 @sf 9 r 82 c
+cmmi7.300 @sf 472 439 p 99 c
+cmr10.300 @sf 489 433 p 41 c
+cmmi10.300 @sf 61 c
+t-rom.300 @sf 50 c
+cmr10.300 @sf 41 c
+cmsy10.300 @sf 62 516 p 15 c
+cmmi10.300 @sf 21 r 80 c
+cmmi7.300 @sf 131 522 p 120 c
+cmr10.300 @sf 163 516 p 61 c
+12 r 40 c
+cmmi10.300 @sf 82 c
+cmmi7.300 @sf 255 522 p 97 c
+cmr10.300 @sf 284 516 p 43 c
+cmmi10.300 @sf 9 r 82 c
+cmmi7.300 @sf 357 522 p 98 c
+cmr10.300 @sf 373 516 p 41 c
+cmmi10.300 @sf 61 c
+t-rom.300 @sf 50 c
+62 607 p (For)s
+15(the)m
+14(\014rst)m
+14(line)m
+14(and)m
+15(any)m
+15(line)m
+14(directly)m
+13(after)m
+15(the)m
+14(resynchronization)m
+13(interval,)m
+14(the)m
+15(prediction)m
+13(method)m
+14(is)m
+14(always)m
+cmmi10.300 @sf 0 657 p 80 c
+cmmi7.300 @sf 27 663 p 120 c
+cmr10.300 @sf 60 657 p 61 c
+cmmi10.300 @sf 13 r 82 c
+cmmi7.300 @sf 137 663 p 97 c
+t-rom.300 @sf 157 657 p 44 c
+15(and)m
+15(the)m
+14(\014rst)m
+14(pel)m
+14(of)m
+15(every)m
+14(such)m
+15(line)m
+14(is)m
+14(predicted)m
+14(by)m
+14(1/2)m
+14(the)m
+14(usable)m
+15(pel-range.)m
+21(Otherwise,)m
+15(the)m
+14(\014rst)m
+14(pel)m
+0 707 p (of)s
+13(every)m
+14(line)m
+14(is)m
+13(predicted)m
+13(by)m
+14(the)m
+13(pel)m
+14(above)m
+14(it,)m
+cmmi10.300 @sf 13 r 80 c
+cmmi7.300 @sf 812 713 p 120 c
+cmr10.300 @sf 844 707 p 61 c
+cmmi10.300 @sf 12 r 82 c
+cmmi7.300 @sf 920 713 p 98 c
+t-rom.300 @sf 936 707 p 46 c
+62 757 p (The)s
+15(predictions)m
+12(are)m
+14(then)m
+14(entropy)m
+12(coded)m
+14(as)m
+15(discussed)m
+14(below)m
+-2 r 46 c
+t-bol.360 @sf 0 875 p (2.7.1)s
+50(Point)m
+19 r 84 c
+-3(ransform)m
+t-rom.300 @sf 0 953 p (In)s
+13(order)m
+13(to)m
+12(represent)m
+14 r 97 c
+14(wider)m
+12(range)m
+14(of)m
+13(values,)m
+14 r 97 c
+13(point)m
+12(transform)m
+13(may)m
+13(be)m
+14(used.)m
+19(Essentially)m
+12 r 97 c
+14(point)m
+12(transform)m
+12(is)m
+13 r 97 c
+0 1003 p (shift)s
+14(of)m
+14(the)m
+15(input)m
+13(and)m
+15(output)m
+13(pel)m
+15(by)m
+14 r 97 c
+15(predetermined)m
+15(number)m
+15(of)m
+14(bits.)m
+21(This)m
+15(allows)m
+14(for)m
+15 r 97 c
+15(lar)m
+(ge)s
+14(bit-per)m
+(-p)s
+-1(el)m
+13(image)m
+0 1053 p (to)s
+16(be)m
+17(ef)m
+(fectively)s
+15(coded)m
+17(as)m
+17 r 97 c
+18(smaller)m
+16(bit-per)m
+(-pel)s
+15(image.)m
+27(The)m
+18(point)m
+15(transform)m
+16(may)m
+17(not)m
+16(be)m
+17(used)m
+16(for)m
+16(baseline)m
+17(or)m
+0 1103 p (extended)s
+14(baseline)m
+14(coding.)m
+t-bol.420 @sf 0 1242 p (2.8)s
+58(Entr)m
+(opy)s
+22(Coding)m
+t-rom.300 @sf 0 1335 p (The)s
+15(block)m
+13(codes)m
+15(from)m
+14(the)m
+14(DPCM)m
+14(and)m
+14(run-length)m
+12(models)m
+14(can)m
+15(be)m
+14(further)m
+14(compressed)m
+15(using)m
+13(entropy)m
+13(coding.)m
+19(For)m
+0 1385 p (the)s
+15(baseline)m
+15(JPEG)m
+15(method,)m
+16(the)m
+14(Huf)m
+(fman)s
+15(coder[)m
+57 c
+-1 r 93 c
+15(is)m
+15(used)m
+15(to)m
+14(compress)m
+16(the)m
+15(data)m
+15(closer)m
+15(to)m
+15(symbol)m
+14(entropy)m
+-2 r 46 c
+21(One)m
+0 1435 p (reason)s
+17(for)m
+16(using)m
+16(the)m
+16(Huf)m
+(fman)s
+16(coder)m
+17(is)m
+17(that)m
+16(it)m
+15(is)m
+17(easy)m
+17(to)m
+16(implement)m
+17(in)m
+16(hardware.)m
+28 r 84 c
+-2 r 111 c
+16(compress)m
+17(data)m
+17(symbols,)m
+0 1484 p (the)s
+17(Huf)m
+(fman)s
+16(coder)m
+17(creates)m
+19(shorter)m
+16(codes)m
+18(for)m
+16(frequently)m
+16(occurring)m
+16(symbols)m
+17(and)m
+17(longer)m
+16(codes)m
+18(for)m
+16(occasionally)m
+0 1534 p (occurring)s
+13(symbols.)m
+62 1584 p (For)s
+14(example,)m
+15(let')m
+-1 r 115 c
+12(encode)m
+14(an)m
+14(excerpt)m
+14(from)m
+14(Michael)m
+13(Jackson')m
+-1 r 115 c
+13(song)m
+t-ita.300 @sf 14(Bad)m
+t-rom.210 @sf 1279 1570 p 52 c
+t-rom.300 @sf 1295 1584 p 46 c
+c-med.300 @sf 0 1675 p (Because)s
+25(I'm)m
+25(bad,)m
+25(I'm)m
+25(bad--)m
+25(come)m
+25(on)m
+0 1725 p (Bad,)s
+25(bad--)m
+25(really,)m
+25(really)m
+25(bad)m
+0 1775 p (You)s
+25(know)m
+25(I'm)m
+25(bad,)m
+25(I'm)m
+25(bad--)m
+0 1825 p (you)s
+25(know)m
+25(it)m
+0 1875 p (Bad,)s
+25(bad--)m
+25(really,)m
+25(really)m
+25(bad)m
+0 1924 p (You)s
+25(know)m
+25(I'm)m
+25(bad,)m
+25(I'm)m
+25(bad--)m
+25(come)m
+25(on,)m
+25(you)m
+25(know)m
+0 1974 p (Bad,)s
+25(bad--)m
+25(really,)m
+25(really)m
+25(bad)m
+t-rom.300 @sf 62 2065 p (The)s
+15(\014rst)m
+13(step)m
+14(in)m
+13(creating)m
+14(Huf)m
+(fman)s
+13(codes)m
+14(is)m
+14(to)m
+13(create)m
+15 r 97 c
+14(table)m
+14(assigning)m
+12 r 97 c
+15(frequency)m
+14(count)m
+13(to)m
+13(each)m
+15(phrase.)m
+19(In)m
+0 2115 p (the)s
+14(above)m
+14(lyrics,)m
+13(ignoring)m
+11(capitalization,)m
+13(this)m
+13(is)m
+14(shown)m
+13(in)m
+13(table)m
+14(2.1.)m
+62 2165 p (Initially)s
+16(designate)m
+19(all)m
+18(symbols)m
+18(as)m
+19(leaf)m
+19(nodes)m
+19(for)m
+18 r 97 c
+19(tree.)m
+33(Now)m
+18(starting)m
+18(from)m
+18(the)m
+18(two)m
+18(least)m
+19(weight)m
+17(nodes,)m
+0 2215 p (aggregate)s
+19(the)m
+18(pair)m
+19(into)m
+17 r 97 c
+19(new)m
+19(node.)m
+33(For)m
+18(example,)m
+21(in)m
+18(the)m
+19(above)m
+18(frequency)m
+19(chart,)m
+t-ita.300 @sf 20(Because)m
+t-rom.300 @sf 20(and)m
+t-ita.300 @sf 19(It)m
+t-rom.300 @sf 18(would)m
+18(be)m
+0 2265 p (aggregated)s
+14(\014rst.)m
+18(Repeat)m
+13(this)m
+13(process)m
+14(for)m
+13(the)m
+13(new)m
+13(set)m
+14(until)m
+11(the)m
+13(entire)m
+13(symbol)m
+13(set)m
+14(is)m
+13(represented)m
+13(by)m
+13 r 97 c
+14(single)m
+13(node.)m
+0 2315 p (The)s
+14(result)m
+13(is)m
+14(shown)m
+13(in)m
+13(\014gure)m
+14(2.6.)m
+62 2364 p 65 c
+14(Huf)m
+(fman)s
+13(code)m
+14(can)m
+14(be)m
+14(generated)m
+14(for)m
+14(each)m
+14(symbol)m
+13(by)m
+14(attaching)m
+13 r 97 c
+14(binary)m
+13(digit)m
+12(to)m
+13(each)m
+14(branch.)m
+19(Let')m
+-1 r 115 c
+13(assign)m
+0 2414 p (the)s
+12(binary)m
+11(digit)m
+11 r 49 c
+12(to)m
+11(the)m
+12(left)m
+12(branches)m
+13(and)m
+12(the)m
+12(binary)m
+11(digit)m
+10 r 48 c
+12(to)m
+12(the)m
+12(right)m
+11(branches.)m
+18(The)m
+13(symbol)m
+12(code)m
+12(is)m
+12(generated)m
+0 2464 p (by)s
+13(following)m
+11(the)m
+13(path)m
+13(of)m
+14(branches)m
+14(from)m
+13(the)m
+13(top)m
+13(node)m
+13(to)m
+13(the)m
+13(symbol)m
+13(leaf)m
+14(node.)m
+18(In)m
+13(the)m
+14(case)m
+15(of)m
+13(the)m
+13(word)m
+t-ita.300 @sf 13(Bad)m
+t-rom.300 @sf 44 c
+14(the)m
+0 2514 p (Huf)s
+(fman)s
+14(code)m
+15(is)m
+14(1,)m
+15(and)m
+15(for)m
+14(the)m
+15(word)m
+t-ita.300 @sf 14(I'm)m
+t-rom.300 @sf 44 c
+15(the)m
+14(Huf)m
+(fman)s
+14(code)m
+15(is)m
+14(01)m
+-1(1.)m
+21 r 65 c
+14(full)m
+14(table)m
+14(for)m
+14(each)m
+16(symbol)m
+14(is)m
+14(shown)m
+14(in)m
+0 2564 p (table)s
+14(2.2.)m
+0 2591 p 756 2 ru
+t-rom.180 @sf 45 2619 p 52 c
+t-rom.240 @sf 60 2630 p (1987)s
+20 r 99 c
+cmsy8.300 @sf -26 r 13 c
+t-rom.240 @sf 1(MJJ)m
+10(Productions,)m
+10(Inc.)m
+t-rom.300 @sf 924 2758 p (10)s
+@eop
+%%Page: ? 3
+11 @bop0
+11 @bop1
+0 78 p 628 2 ru
+t-rom.300 @sf 25 113 p (Phrase)s
+113(Symbol)m
+49(Frequency)m
+0 130 p 628 2 ru
+25 165 p (Because)s
+86 r 98 c
+313 r 49 c
+25 215 p (I'm)s
+163 r 73 c
+320 r 54 c
+25 264 p (Bad)s
+156 r 66 c
+285(15)m
+25 314 p (Come)s
+14(on)m
+68 r 67 c
+306 r 50 c
+25 364 p (It)s
+197 r 105 c
+322 r 49 c
+25 414 p (Really)s
+114 r 82 c
+306 r 54 c
+25 464 p 89 c
+-3(ou)m
+12(know)m
+49 r 89 c
+304 r 52 c
+0 481 p 628 2 ru
+500 554 p 84 c
+-2(able)m
+14(2.1:)m
+17(The)m
+15(frequency)m
+14(of)m
+13(words)m
+13(in)m
+13(the)m
+14(song)m
+t-ita.300 @sf 13(Bad)m
+t-rom.300 @sf 46 c
+0 1742 p @beginspecial
+0.500000 @hscale
+0.500000 @vscale
+0.000000 @hoffset
+-140.000000 @voffset
+@setspecial
+%!PS-Adobe-2.0 EPSF-1.2
+%%DocumentFonts: Helvetica
+%%Pages: 1
+%%BoundingBox: 42 293 594 738
+%%EndComments
+
+50 dict begin
+
+/arrowHeight 8 def
+/arrowWidth 4 def
+/none null def
+/numGraphicParameters 17 def
+/stringLimit 65535 def
+
+/Begin {
+save
+numGraphicParameters dict begin
+} def
+
+/End {
+end
+restore
+} def
+
+/SetB {
+dup type /nulltype eq {
+pop
+false /brushRightArrow idef
+false /brushLeftArrow idef
+true /brushNone idef
+} {
+/brushDashOffset idef
+/brushDashArray idef
+0 ne /brushRightArrow idef
+0 ne /brushLeftArrow idef
+/brushWidth idef
+false /brushNone idef
+} ifelse
+} def
+
+/SetCFg {
+/fgblue idef
+/fggreen idef
+/fgred idef
+} def
+
+/SetCBg {
+/bgblue idef
+/bggreen idef
+/bgred idef
+} def
+
+/SetF {
+/printSize idef
+/printFont idef
+} def
+
+/SetP {
+dup type /nulltype eq {
+pop true /patternNone idef
+} {
+/patternGrayLevel idef
+patternGrayLevel -1 eq {
+/patternString idef
+} if
+false /patternNone idef
+} ifelse
+} def
+
+/BSpl {
+0 begin
+storexyn
+newpath
+n 1 gt {
+0 0 0 0 0 0 1 1 true subspline
+n 2 gt {
+0 0 0 0 1 1 2 2 false subspline
+1 1 n 3 sub {
+/i exch def
+i 1 sub dup i dup i 1 add dup i 2 add dup false subspline
+} for
+n 3 sub dup n 2 sub dup n 1 sub dup 2 copy false subspline
+} if
+n 2 sub dup n 1 sub dup 2 copy 2 copy false subspline
+patternNone not brushLeftArrow not brushRightArrow not and and { ifill } if
+brushNone not { istroke } if
+0 0 1 1 leftarrow
+n 2 sub dup n 1 sub dup rightarrow
+} if
+end
+} dup 0 4 dict put def
+
+/Circ {
+newpath
+0 360 arc
+patternNone not { ifill } if
+brushNone not { istroke } if
+} def
+
+/CBSpl {
+0 begin
+dup 2 gt {
+storexyn
+newpath
+n 1 sub dup 0 0 1 1 2 2 true subspline
+1 1 n 3 sub {
+/i exch def
+i 1 sub dup i dup i 1 add dup i 2 add dup false subspline
+} for
+n 3 sub dup n 2 sub dup n 1 sub dup 0 0 false subspline
+n 2 sub dup n 1 sub dup 0 0 1 1 false subspline
+patternNone not { ifill } if
+brushNone not { istroke } if
+} {
+Poly
+} ifelse
+end
+} dup 0 4 dict put def
+
+/Elli {
+0 begin
+newpath
+4 2 roll
+translate
+scale
+0 0 1 0 360 arc
+patternNone not { ifill } if
+brushNone not { istroke } if
+end
+} dup 0 1 dict put def
+
+/Line {
+0 begin
+2 storexyn
+newpath
+x 0 get y 0 get moveto
+x 1 get y 1 get lineto
+brushNone not { istroke } if
+0 0 1 1 leftarrow
+0 0 1 1 rightarrow
+end
+} dup 0 4 dict put def
+
+/MLine {
+0 begin
+storexyn
+newpath
+n 1 gt {
+x 0 get y 0 get moveto
+1 1 n 1 sub {
+/i exch def
+x i get y i get lineto
+} for
+patternNone not brushLeftArrow not brushRightArrow not and and { ifill } if
+brushNone not { istroke } if
+0 0 1 1 leftarrow
+n 2 sub dup n 1 sub dup rightarrow
+} if
+end
+} dup 0 4 dict put def
+
+/Poly {
+3 1 roll
+newpath
+moveto
+-1 add
+{ lineto } repeat
+closepath
+patternNone not { ifill } if
+brushNone not { istroke } if
+} def
+
+/Rect {
+0 begin
+/t exch def
+/r exch def
+/b exch def
+/l exch def
+newpath
+l b moveto
+l t lineto
+r t lineto
+r b lineto
+closepath
+patternNone not { ifill } if
+brushNone not { istroke } if
+end
+} dup 0 4 dict put def
+
+/Text {
+ishow
+} def
+
+/idef {
+dup where { pop pop pop } { exch def } ifelse
+} def
+
+/ifill {
+0 begin
+gsave
+patternGrayLevel -1 ne {
+fgred bgred fgred sub patternGrayLevel mul add
+fggreen bggreen fggreen sub patternGrayLevel mul add
+fgblue bgblue fgblue sub patternGrayLevel mul add setrgbcolor
+eofill
+} {
+eoclip
+originalCTM setmatrix
+pathbbox /t exch def /r exch def /b exch def /l exch def
+/w r l sub ceiling cvi def
+/h t b sub ceiling cvi def
+/imageByteWidth w 8 div ceiling cvi def
+/imageHeight h def
+bgred bggreen bgblue setrgbcolor
+eofill
+fgred fggreen fgblue setrgbcolor
+w 0 gt h 0 gt and {
+l b translate w h scale
+w h true [w 0 0 h neg 0 h] { patternproc } imagemask
+} if
+} ifelse
+grestore
+end
+} dup 0 8 dict put def
+
+/istroke {
+gsave
+brushDashOffset -1 eq {
+[] 0 setdash
+1 setgray
+} {
+brushDashArray brushDashOffset setdash
+fgred fggreen fgblue setrgbcolor
+} ifelse
+brushWidth setlinewidth
+originalCTM setmatrix
+stroke
+grestore
+} def
+
+/ishow {
+0 begin
+gsave
+printFont findfont printSize scalefont setfont
+fgred fggreen fgblue setrgbcolor
+/vertoffset printSize neg def {
+0 vertoffset moveto show
+/vertoffset vertoffset printSize sub def
+} forall
+grestore
+end
+} dup 0 3 dict put def
+
+/patternproc {
+0 begin
+/patternByteLength patternString length def
+/patternHeight patternByteLength 8 mul sqrt cvi def
+/patternWidth patternHeight def
+/patternByteWidth patternWidth 8 idiv def
+/imageByteMaxLength imageByteWidth imageHeight mul
+stringLimit patternByteWidth sub min def
+/imageMaxHeight imageByteMaxLength imageByteWidth idiv patternHeight idiv
+patternHeight mul patternHeight max def
+/imageHeight imageHeight imageMaxHeight sub store
+/imageString imageByteWidth imageMaxHeight mul patternByteWidth add string def
+0 1 imageMaxHeight 1 sub {
+/y exch def
+/patternRow y patternByteWidth mul patternByteLength mod def
+/patternRowString patternString patternRow patternByteWidth getinterval def
+/imageRow y imageByteWidth mul def
+0 patternByteWidth imageByteWidth 1 sub {
+/x exch def
+imageString imageRow x add patternRowString putinterval
+} for
+} for
+imageString
+end
+} dup 0 12 dict put def
+
+/min {
+dup 3 2 roll dup 4 3 roll lt { exch } if pop
+} def
+
+/max {
+dup 3 2 roll dup 4 3 roll gt { exch } if pop
+} def
+
+/arrowhead {
+0 begin
+transform originalCTM itransform
+/taily exch def
+/tailx exch def
+transform originalCTM itransform
+/tipy exch def
+/tipx exch def
+/dy tipy taily sub def
+/dx tipx tailx sub def
+/angle dx 0 ne dy 0 ne or { dy dx atan } { 90 } ifelse def
+gsave
+originalCTM setmatrix
+tipx tipy translate
+angle rotate
+newpath
+0 0 moveto
+arrowHeight neg arrowWidth 2 div lineto
+arrowHeight neg arrowWidth 2 div neg lineto
+closepath
+patternNone not {
+originalCTM setmatrix
+/padtip arrowHeight 2 exp 0.25 arrowWidth 2 exp mul add sqrt brushWidth mul
+arrowWidth div def
+/padtail brushWidth 2 div def
+tipx tipy translate
+angle rotate
+padtip 0 translate
+arrowHeight padtip add padtail add arrowHeight div dup scale
+arrowheadpath
+ifill
+} if
+brushNone not {
+originalCTM setmatrix
+tipx tipy translate
+angle rotate
+arrowheadpath
+istroke
+} if
+grestore
+end
+} dup 0 9 dict put def
+
+/arrowheadpath {
+newpath
+0 0 moveto
+arrowHeight neg arrowWidth 2 div lineto
+arrowHeight neg arrowWidth 2 div neg lineto
+closepath
+} def
+
+/leftarrow {
+0 begin
+y exch get /taily exch def
+x exch get /tailx exch def
+y exch get /tipy exch def
+x exch get /tipx exch def
+brushLeftArrow { tipx tipy tailx taily arrowhead } if
+end
+} dup 0 4 dict put def
+
+/rightarrow {
+0 begin
+y exch get /tipy exch def
+x exch get /tipx exch def
+y exch get /taily exch def
+x exch get /tailx exch def
+brushRightArrow { tipx tipy tailx taily arrowhead } if
+end
+} dup 0 4 dict put def
+
+/midpoint {
+0 begin
+/y1 exch def
+/x1 exch def
+/y0 exch def
+/x0 exch def
+x0 x1 add 2 div
+y0 y1 add 2 div
+end
+} dup 0 4 dict put def
+
+/thirdpoint {
+0 begin
+/y1 exch def
+/x1 exch def
+/y0 exch def
+/x0 exch def
+x0 2 mul x1 add 3 div
+y0 2 mul y1 add 3 div
+end
+} dup 0 4 dict put def
+
+/subspline {
+0 begin
+/movetoNeeded exch def
+y exch get /y3 exch def
+x exch get /x3 exch def
+y exch get /y2 exch def
+x exch get /x2 exch def
+y exch get /y1 exch def
+x exch get /x1 exch def
+y exch get /y0 exch def
+x exch get /x0 exch def
+x1 y1 x2 y2 thirdpoint
+/p1y exch def
+/p1x exch def
+x2 y2 x1 y1 thirdpoint
+/p2y exch def
+/p2x exch def
+x1 y1 x0 y0 thirdpoint
+p1x p1y midpoint
+/p0y exch def
+/p0x exch def
+x2 y2 x3 y3 thirdpoint
+p2x p2y midpoint
+/p3y exch def
+/p3x exch def
+movetoNeeded { p0x p0y moveto } if
+p1x p1y p2x p2y p3x p3y curveto
+end
+} dup 0 17 dict put def
+
+/storexyn {
+/n exch def
+/y n array def
+/x n array def
+n 1 sub -1 0 {
+/i exch def
+y i 3 2 roll put
+x i 3 2 roll put
+} for
+} def
+
+%%EndProlog
+
+%I Idraw 5 Grid 8
+
+%%Page: 1 1
+
+Begin
+%I b u
+%I cfg u
+%I cbg u
+%I f u
+%I p u
+%I t
+[ 0.923077 0 0 0.923077 0 0 ] concat
+/originalCTM matrix currentmatrix def
+
+Begin %I Elli
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t
+[ 1 0 0 1 54 -20 ] concat
+%I
+62 773 24 23 Elli
+End
+
+Begin %I Elli
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t
+[ 1 0 0 1 191 -84 ] concat
+%I
+62 773 24 23 Elli
+End
+
+Begin %I Elli
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t
+[ 1 0 0 1 324 -193 ] concat
+%I
+62 773 24 23 Elli
+End
+
+Begin %I Elli
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t
+[ 1 0 0 1 419 -263 ] concat
+%I
+62 773 24 23 Elli
+End
+
+Begin %I Elli
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t
+[ 1 0 0 1 135 -194 ] concat
+%I
+62 773 24 23 Elli
+End
+
+Begin %I Elli
+%I b 65535
+1 0 1 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t
+[ 1 0 0 1 501 -332 ] concat
+%I
+62 773 24 23 Elli
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+140 742 232 701 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+273 675 368 597 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+405 567 463 526 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+500 495 544 457 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+241 669 210 598 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+103 732 67 650 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+183 557 122 486 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+210 558 261 485 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+378 559 335 494 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+467 492 421 425 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+551 421 504 361 Line
+End
+
+Begin %I Line
+%I b 65535
+1 0 0 [] 0 SetB
+%I cfg Black
+0 0 0 SetCFg
+%I cbg White
+1 1 1 SetCBg
+%I p
+0.75 SetP
+%I t u
+%I
+580 425 630 362 Line
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 47 640 ] concat
+%I
+[
+(\(B 15\))
+(Bad)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 87 799 ] concat
+%I
+[
+(\(BIRYCbi 35\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 269 735 ] concat
+%I
+[
+(\(IRYCbi 20\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 382 628 ] concat
+%I
+[
+(\(YCbi 8\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 573 488 ] concat
+%I
+[
+(\(bi 2\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 151 625 ] concat
+%I
+[
+(\(IR 12\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 496 555 ] concat
+%I
+[
+(\(Cbi 4\))
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 103 474 ] concat
+%I
+[
+(\(I 6\))
+(I'm)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 243 473 ] concat
+%I
+[
+(\(R 6\))
+(Really)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 312 486 ] concat
+%I
+[
+(\(Y 4\))
+(You know)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 389 418 ] concat
+%I
+[
+(\(C 2\))
+(Come on)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 468 356 ] concat
+%I
+[
+(\(b 1\))
+(because)
+] Text
+End
+
+Begin %I Text
+%I cfg Black
+0 0 0 SetCFg
+%I f *-helvetica-medium-r-*-140-*
+/Helvetica 14 SetF
+%I t
+[ 1 0 0 1 618 351 ] concat
+%I
+[
+(\(i 1\))
+(it)
+] Text
+End
+
+End %I eop
+
+showpage
+
+%%Trailer
+
+end
+@endspecial
+506 1812 p (Figure)s
+13(2.6:)m
+18(The)m
+14(Huf)m
+(fman)s
+13(tree)m
+14(for)m
+14(the)m
+13(lyrics)m
+13(to)m
+t-ita.300 @sf 13(Bad)m
+t-rom.300 @sf 46 c
+0 2057 p 1050 2 ru
+25 2092 p (Phrase)s
+113(Symbol)m
+49(Frequency)m
+50(Code)m
+14(Length)m
+65(Code)m
+0 2109 p 1050 2 ru
+25 2143 p (Because)s
+86 r 98 c
+313 r 49 c
+247 r 53 c
+50(00001)m
+25 2193 p (I'm)s
+163 r 73 c
+320 r 54 c
+247 r 51 c
+93(01)m
+-1 r 49 c
+25 2243 p (Bad)s
+156 r 66 c
+285(15)m
+247 r 49 c
+133 r 49 c
+25 2293 p (Come)s
+14(on)m
+68 r 67 c
+306 r 50 c
+247 r 52 c
+71(0001)m
+25 2342 p (It)s
+197 r 105 c
+322 r 49 c
+247 r 53 c
+50(00000)m
+25 2392 p (Really)s
+114 r 82 c
+306 r 54 c
+247 r 51 c
+92(010)m
+25 2442 p 89 c
+-3(ou)m
+12(know)m
+49 r 89 c
+304 r 52 c
+247 r 51 c
+92(001)m
+0 2459 p 1050 2 ru
+494 2533 p 84 c
+-2(able)m
+13(2.2:)m
+18(The)m
+14(Huf)m
+(fman)s
+13(codes)m
+15(for)m
+13(the)m
+13(words)m
+14(in)m
+t-ita.300 @sf 13(Bad)m
+t-rom.300 @sf 46 c
+925 2758 p 49 c
+-1 r 49 c
+@eop
+%%Page: ? 4
+12 @bop0
+cmmi10.300 @sf
+[<FF800400001C000400000C000E000004000E000004000E000004001E000002001D000002003900
+  00020039000002003900000100708000010070800001007080000100E080000080E040000081C0
+  40000081C040000081C0400000438020000043802000004300200000470020000027001000002E
+  001000002E001000002E001800001C001C0001FC00FF80> 40 28 -2 0 33.352] 78 @dc
+cmmi7.300 @sf
+[<FE187FC018180E00081C0700081E0700081E0700081D0700041C83800438838004384380043823
+  80023821C0023811C0023809C0027009C0017004E0017002E0017002E0017001E000F000F007F0
+  00FE> 32 20 -1 0 31.654] 77 @dc
+[<FFFC001C07000E01C00E00E00E00700E003007003807001C07001C07001C03800E03800E03800E
+  03800E01C00E01C00C01C00C01C01800E07007FFE0> 24 20 -1 0 27.141] 68 @dc
+[<1F8000306000601000C00800C00400C00400E00200E00200E00200E00200700100700100700100
+  7001003800803800803800803800801C00C0FF83F8> 24 20 -2 0 22.613] 85 @dc
+[<FE004000180040000800E0000800E0000801E0000801E000040390000403900004071000040710
+  00020E0800020E0800021C0800021C08000138040001380400017004000170040000E0060007E0
+  1FC0> 32 20 -1 0 26.293] 78 @dc
+/cmmi5.300 @newfont
+cmmi5.300 @sf
+[<3E006180C040C000C0004000608030C00F80> 16 9 -2 0 13.479] 99 @dc
+cmmi10.300 @sf
+[<600700E00C80701C40701C20700E20700E20380E003807003807003807001C03801C03801C0380
+  1E03800E03800F03800EC3000E3E00070000070000070000070000038000038000038000038000
+  01C00001C0000FC000> 24 29 -2 0 23.916] 104 @dc
+cmsy10.300 @sf
+[<018000018000018000018000418200F18F00399C000FF00003C00003C0000FF000399C00F18F00
+  418200018000018000018000018000> 24 18 -2 -1 20.755] 3 @dc
+12 @bop1
+t-rom.300 @sf 62 18 p 84 c
+-2 r 111 c
+15(encode)m
+15 r 97 c
+16(symbol,)m
+15(just)m
+14(output)m
+13(the)m
+15(code)m
+16(word)m
+14(to)m
+15(the)m
+15(bit)m
+14(stream.)m
+23(For)m
+15(example,)m
+16(output)m
+14(the)m
+14(code)m
+16(word)m
+14(010)m
+0 68 p (for)s
+t-ita.300 @sf 13(Really)m
+t-rom.300 @sf 46 c
+19 r 84 c
+-2 r 111 c
+12(decode)m
+15(from)m
+13 r 97 c
+14(stream)m
+14(of)m
+13(bits,)m
+13(start)m
+13(from)m
+13(the)m
+13(top)m
+13(node,)m
+14(and)m
+13(follow)m
+12(the)m
+13(left)m
+13(branch)m
+14(or)m
+13(right)m
+12(branch)m
+0 118 p (depending)s
+13(on)m
+14(the)m
+14(value)m
+14(taken)m
+14(from)m
+14(the)m
+14(bit)m
+13(stream.)m
+21(Continu)m
+-1 r 101 c
+13(until)m
+12 r 97 c
+15(leaf)m
+14(node)m
+14(is)m
+14(reached.)m
+21(The)m
+15(decoded)m
+14(symbol)m
+0 167 p (is)s
+14(the)m
+13(symbol)m
+13(associated)m
+15(with)m
+12(that)m
+13(leaf.)m
+62 217 p (In)s
+19(the)m
+19(above)m
+19(example,)m
+21(the)m
+19(\014rst)m
+19(few)m
+19(bits)m
+18(in)m
+18(the)m
+19(output)m
+17(bit)m
+18(stream)m
+20(are)m
+19(\(bars)m
+19(are)m
+20(inserted)m
+19(for)m
+18(the)m
+19(reader)m
+2 r 39 c
+-1 r 115 c
+0 267 p (convenience\))s
+62 364 p (00001|01)s
+-1(1)m
+-1(|1|)m
+-1(01)m
+-2(1|)m
+-1(1|...)m
+62 461 p (Our)s
+14(coding)m
+12(ef)m
+(\014ciency)s
+14(can)m
+14(be)m
+14(calculated)m
+14(by)m
+14(comparing)m
+13(the)m
+13(number)m
+14(of)m
+13(bits)m
+13(required)m
+13(to)m
+13(realize)m
+15(the)m
+13(lyrics.)m
+18(For)m
+0 511 p (the)s
+16(Huf)m
+(fman)s
+15(code)m
+16(above,)m
+18(the)m
+15(bit)m
+15(length)m
+15(is)m
+16(15\(1\))m
+15 r 43 c
+16(16\(3\))m
+15 r 43 c
+17(2\(4\))m
+15 r 43 c
+17(2\(5\))m
+15 r 61 c
+16(81)m
+16(bits.)m
+24(In)m
+16(comparison,)m
+17(for)m
+15 r 97 c
+17(three)m
+0 561 p (bit)s
+16(code,)m
+20(the)m
+17(bit)m
+16(length)m
+17(is)m
+17(35\(3\))m
+17 r 61 c
+18(105)m
+16(bits;)m
+18(for)m
+17(an)m
+18(ideal)m
+18 r 55 c
+17(symbol)m
+17(code,)m
+19(the)m
+17(bit)m
+17(length)m
+16(is)m
+17(35)m
+cmr10.300 @sf 40 c
+t-rom.300 @sf (log)s
+t-rom.210 @sf 1698 572 p 50 c
+t-rom.300 @sf 1722 561 p 55 c
+cmr10.300 @sf 41 c
+t-rom.300 @sf 17 r 61 c
+18(98.3)m
+0 611 p (bits.)s
+18(The)m
+13(Huf)m
+(fman)s
+13(coder)m
+13(compresses)m
+15(the)m
+13(lyrics)m
+12(by)m
+13(about)m
+12(20)m
+13(percent;)m
+13(but)m
+13(this)m
+12(\014gure)m
+13(does)m
+13(not)m
+13(include)m
+12(the)m
+13(cost)m
+13(of)m
+0 660 p (transmitting)s
+11(the)m
+14(initial)m
+12(Huf)m
+(fman)s
+13(code)m
+14(table)m
+13(to)m
+14(the)m
+13(decoder)m
+-1 r 46 c
+t-bol.420 @sf 0 799 p (2.9)s
+58(Custom)m
+23(and)m
+23(Pr)m
+(ede\014ned)s
+21(Huffman)m
+24 r 84 c
+-4(ables)m
+t-rom.300 @sf 0 892 p (Huf)s
+(fman)s
+17(tables)m
+18(can)m
+19(be)m
+18(prede\014ned)m
+18(from)m
+18(statistics)m
+17(generated)m
+18(from)m
+18(sets)m
+18(of)m
+18(images)m
+18(or)m
+18(calculated)m
+18(custom)m
+18(on)m
+18(an)m
+0 942 p (image-by-image)s
+12(basis.)m
+19(Normally)m
+-2 r 44 c
+11(custom)m
+12(Huf)m
+(fman)s
+12(tables)m
+12(reduce)m
+13(the)m
+12(number)m
+12(of)m
+12(bits)m
+11(sent)m
+12(by)m
+12(less)m
+13(than)m
+12(10)m
+12(percent)m
+0 992 p (over)s
+13(prede\014ned)m
+13(tables.)m
+18(For)m
+13(the)m
+13(system)m
+13(presented)m
+13(here,)m
+14(the)m
+13(default)m
+12(method)m
+12(is)m
+13(to)m
+12(generate)m
+14(custom)m
+13(tables)m
+13(by)m
+12 r 97 c
+13(two)m
+0 1041 p (pass)s
+14(system,)m
+15(though,)m
+12(optionally)m
+-3 r 44 c
+12(internally)m
+12(or)m
+14(externally)m
+12(speci\014ed)m
+15(tables)m
+14(can)m
+14(be)m
+14(used)m
+14(instead.)m
+t-bol.420 @sf 0 1180 p (2.10)s
+58(Interleaving)m
+t-rom.300 @sf 0 1273 p (An)s
+16(image)m
+17(can)m
+18(be)m
+16(composed)m
+17(of)m
+16(several)m
+18(components,)m
+17(for)m
+16(example,)m
+18(Red)m
+17(Green,)m
+18(and)m
+16(Blue.)m
+27(If)m
+16(we)m
+17(transfer)m
+16(these)m
+0 1323 p (components)s
+11(one)m
+11(image)m
+12(color)m
+11(component)m
+11(at)m
+11 r 97 c
+12(time,)m
+12(we)m
+12(call)m
+11(it)m
+11(noninterleaved)m
+10(mode.)m
+18(This)m
+11(mode,)m
+13(although)m
+9(simpler)m
+-1 r 44 c
+0 1373 p (would)s
+14(require)m
+15 r 97 c
+16(frame)m
+16(buf)m
+(fer)s
+14(to)m
+15(store)m
+15(every)m
+16(component,)m
+15(except)m
+16(the)m
+15(last)m
+15(one,)m
+16(because)m
+17 r 97 c
+16(pixel')m
+-1 r 115 c
+13(complete)m
+16(value)m
+0 1422 p (is)s
+15(unknown)m
+13(until)m
+13(all)m
+15(of)m
+14(its)m
+14(component)m
+15(values)m
+15(are)m
+15(received.)m
+23(For)m
+15(example,)m
+16(we)m
+15(don')m
+116 c
+13(know)m
+14(the)m
+15(\014rst)m
+15(pixel')m
+-2 r 115 c
+13(RGB)m
+0 1472 p (value)s
+14(without)m
+11(all)m
+14(of)m
+13(the)m
+14 r 82 c
+13(components)m
+14(and)m
+14 r 71 c
+13(components)m
+14(received)m
+14(\014rst.)m
+62 1522 p (Interleaved)s
+16(mode)m
+15(solves)m
+16(this)m
+14(problem.)m
+23 r 87 c
+-2 r 101 c
+15(take)m
+16 r 97 c
+16(few)m
+16(blocks)m
+15(of)m
+15(one)m
+15(component,)m
+16 r 97 c
+16(few)m
+16(blocks)m
+15(of)m
+15(the)m
+15(next)m
+0 1572 p (component,)s
+12(and)m
+12(so)m
+12(on,)m
+13(until)m
+10(we)m
+12(have)m
+13(blocks)m
+11(from)m
+12(all)m
+12(components.)m
+17(Then)m
+13(we)m
+12(can)m
+13(determine)m
+12(the)m
+12(pixel)m
+11(values)m
+12(from)m
+0 1622 p (the)s
+13(subset)m
+13(of)m
+13(the)m
+13(image)m
+13(received.)m
+19(That)m
+14(is,)m
+13(supposing)m
+12(we)m
+13(send)m
+14(one)m
+13(Red)m
+13(block,)m
+13(one)m
+13(Green)m
+13(block,)m
+13(one)m
+13(Blue)m
+13(block,)m
+0 1671 p (one)s
+14(Red)m
+14(block,)m
+13(etc.,)m
+16(then)m
+13(after)m
+14(one)m
+14(block)m
+13(trio)m
+13(of)m
+14(RGB,)m
+13(we)m
+15(can)m
+14(determine)m
+14(the)m
+14(full)m
+13(24)m
+13(bit)m
+13(value)m
+14(for)m
+13(pixels)m
+14(within)m
+0 1721 p (that)s
+13(block.)m
+62 1771 p (Since)s
+15(some)m
+15(color)m
+13(spaces,)m
+16(by)m
+14(convention,)m
+13(have)m
+15(decimated)m
+15(components,)m
+14(e.g.)m
+21(YCbCr)m
+13(space)m
+15(may)m
+15(decimate)m
+15(Cb)m
+0 1821 p (and)s
+14(Cr)m
+13(horizontally)m
+-3 r 44 c
+12(vertically)m
+-2 r 44 c
+13(or)m
+13(both,)m
+13(the)m
+14(sampling)m
+13(rate)m
+14(for)m
+13(interleaving)m
+12(must)m
+14(be)m
+14(speci\014ed.)m
+62 1871 p (For)s
+13 r 97 c
+13(set)m
+12(of)m
+12(color)m
+12(components)m
+13(with)m
+11(various)m
+12(sampling)m
+12(frequencies,)m
+13(the)m
+12(minimum)m
+13(data)m
+12(unit)m
+11(is)m
+13(de\014ned)m
+13(in)m
+11(terms)m
+0 1920 p (of)s
+14(the)m
+15(frequency)m
+15(of)m
+15(the)m
+14(blocks.)m
+22(For)m
+14(example,)m
+16(4:2:2,)m
+14(the)m
+15(YCbCr)m
+14(color)m
+14(\014le)m
+15(can)m
+15(be)m
+16(speci\014ed)m
+15(as)m
+16(\(2h1v\))m
+13 r 89 c
+15(\(1h1v\))m
+0 1970 p (Cb)s
+13(\(1h1v\))m
+13(Cr)m
+-1 r 46 c
+17(That)m
+14(would)m
+12(be)m
+c-med.300 @sf 0 2057 p (Y1)s
+25(Y2)m
+25(Cb1)m
+25(Cr1)m
+100(Y3)m
+25(Y4)m
+25(Cb2)m
+25(Cr2)m
+25(...)m
+t-rom.300 @sf 62 2143 p (Now)s
+19(4:1:1)m
+17(for)m
+18(YCbCr)m
+18(can)m
+19(be)m
+19(speci\014ed)m
+19(as)m
+20(\(2h2v\))m
+17 r 89 c
+19(\(1h1v\))m
+17(Cb)m
+19(\(1h1v\))m
+17(Cr)m
+-1 r 46 c
+32(That)m
+19(means)m
+20(the)m
+18(Cb)m
+18(and)m
+19(Cr)m
+0 2193 p (component)s
+13(would)m
+13(be)m
+14(decimated)m
+14(by)m
+14 r 97 c
+14(factor)m
+14(of)m
+13(2,)m
+14(both)m
+13(vertically)m
+12(and)m
+14(horizontally)m
+-3 r 46 c
+c-med.300 @sf 0 2280 p (Y1)s
+25(Y2)m
+250(Y5)m
+25(Y6)m
+0 2330 p (Y3)s
+25(Y4)m
+25(Cb1)m
+25(Cr1)m
+50(Y7)m
+25(Y8)m
+25(Cb2)m
+25(Cr2)m
+25(...)m
+t-rom.300 @sf 62 2416 p (The)s
+18(sum)m
+17(of)m
+17(each)m
+18(component')m
+-1 r 115 c
+15(horizontal)m
+15(frequency)m
+17(multiplied)m
+15(by)m
+17(the)m
+17(vertical)m
+16(frequency)m
+17(is)m
+17(the)m
+17(Minimum)m
+0 2466 p (Data)s
+14(Unit)m
+13(\(MDU\);)m
+13(that)m
+13(is,)m
+14(the)m
+13(number)m
+14(of)m
+13(blocks)m
+14(that)m
+13(form)m
+13 r 97 c
+14(single)m
+13(unit)m
+13(of)m
+13(transmission.)m
+cmmi10.300 @sf 766 2596 p 78 c
+cmmi7.300 @sf 799 2602 p 77 c
+3 r 68 c
+1 r 85 c
+cmr10.300 @sf 902 2596 p 61 c
+cmmi7.300 @sf 955 2544 p 78 c
+cmmi5.300 @sf 981 2548 p 99 c
+cmex10.300 @sf 946 2557 p 88 c
+cmmi7.300 @sf 950 2646 p 105 c
+cmr7.300 @sf 61 c
+t-rom.210 @sf 48 c
+cmmi10.300 @sf 1013 2596 p 104 c
+cmmi7.300 @sf 1037 2602 p 105 c
+cmsy10.300 @sf 1059 2596 p 3 c
+cmmi10.300 @sf 9 r 118 c
+cmmi7.300 @sf 1109 2602 p 105 c
+cmr10.300 @sf 1784 2596 p 40 c
+t-rom.300 @sf 50 c
+cmmi10.300 @sf 58 c
+t-rom.300 @sf (10)s
+cmr10.300 @sf 41 c
+t-rom.300 @sf 924 2758 p (12)s
+@eop
+%%Page: ? 5
+14 @bop0
+14 @bop1
+t-bol.600 @sf 0 329 p (Chapter)s
+31 r 51 c
+t-bol.750 @sf 0 537 p (Calling)s
+39(Parameters)m
+t-rom.300 @sf 0 757 p (The)s
+15(calling)m
+14(parameters)m
+16(are)m
+15(speci\014ed)m
+16(for)m
+14(the)m
+14(UNIX)m
+15(operating)m
+14(system.)m
+21(According)m
+14(to)m
+15(standard)m
+14(convention,)m
+14(when)m
+0 807 p (we)s
+13(describe)m
+12(an)m
+12(option)m
+10(it)m
+12(is)m
+11(placed)m
+13(between)m
+12(square)m
+13(brackets.)m
+18(These)m
+14(square)m
+12(brackets)m
+12(nest,)m
+13(so)m
+12(an)m
+12(optional)m
+11(ar)m
+(gument)s
+0 857 p (of)s
+13(an)m
+14(optional)m
+12(ar)m
+(gument)s
+13(would)m
+13(be)m
+14(nestled)m
+13(inside)m
+13(two)m
+13(pairs)m
+14(of)m
+13(brackets.)m
+t-bol.420 @sf 0 995 p (3.1)s
+58(Encoder)m
+t-rom.300 @sf 0 1088 p (The)s
+14(calling)m
+13(parameters)m
+15(to)m
+13(start)m
+14(the)m
+c-med.300 @sf 13(jpeg)m
+t-rom.300 @sf 14(encoder)m
+14(is)m
+c-med.300 @sf 0 1221 p (jpeg)s
+25(-iw)m
+25(ImageWidth)m
+25(-ih)m
+25(ImageHeight)m
+25([-JFIF])m
+25([-q\(l\))m
+25(Q-Factor])m
+125 1271 p ([-a])s
+25([-b])m
+25([-d])m
+25([-k)m
+25(predictortype])m
+25([-n])m
+25([-o])m
+25([-y])m
+25([-z])m
+125 1321 p ([-p)s
+25(PrecisionValue])m
+25([-t)m
+25(pointtransform])m
+125 1371 p ([-r)s
+25(ResyncInterval])m
+25([-s)m
+25(StreamName])m
+125 1421 p ([[-ci)s
+25(ComponentIndex1])m
+25([-fw)m
+25(FrameWidth1])m
+25([-fh)m
+25(FrameHeight1])m
+150 1470 p ([-hf)s
+25(HorizontalFrequency1])m
+25([-vf)m
+25(VerticalFrequency1])m
+150 1520 p (ComponentFile1])s
+125 1570 p ([[-ci)s
+25(ComponentIndex2])m
+25([-fw)m
+25(FrameWidth2])m
+25([-fh)m
+25(FrameHeight2])m
+150 1620 p ([-hf)s
+25(HorizontalFrequency2])m
+25([-vf)m
+25(VerticalFrequency2])m
+150 1670 p (ComponentFile1])s
+125 1719 p (....)s
+0 1819 p (-JFIF)s
+25(puts)m
+25 r 97 c
+25(JFIF)m
+25(marker.)m
+25(Don't)m
+25(change)m
+25(component)m
+25(indices.)m
+0 1869 p (-a)s
+25(enables)m
+25(Reference)m
+25(DCT.)m
+0 1919 p (-b)s
+25(enables)m
+25(Lee)m
+25(DCT.)m
+0 1969 p (-d)s
+25(decoder)m
+25(enable.)m
+0 2018 p (-[k)s
+25(predictortype])m
+25(enables)m
+25(lossless)m
+25(mode.)m
+0 2068 p (-q)s
+25(specifies)m
+25(quantization)m
+25(factor;)m
+25(-ql)m
+25(specifies)m
+25(can)m
+25(be)m
+25(long.)m
+0 2118 p (-n)s
+25(enables)m
+25(non-interleaved)m
+25(mode.)m
+0 2168 p (-[t)s
+25(pointtransform])m
+25(is)m
+25(the)m
+25(number)m
+25(of)m
+25(bits)m
+25(for)m
+25(the)m
+25(PT)m
+25(shift.)m
+0 2218 p (-o)s
+25(enables)m
+25(the)m
+25(Command)m
+25(Interpreter.)m
+0 2267 p (-p)s
+25(specifies)m
+25(precision.)m
+0 2317 p (-y)s
+25(run)m
+25(in)m
+25(robust)m
+25(mode)m
+25(against)m
+25(errors)m
+25(\(cannot)m
+25(be)m
+25(used)m
+25(with)m
+25(DNL\).)m
+0 2367 p (-z)s
+25(uses)m
+25(default)m
+25(Huffman)m
+25(tables.)m
+125 2417 p (....)s
+t-rom.300 @sf 62 2500 p 87 c
+-2 r 101 c
+13(examine)m
+15(these)m
+14(parameters,)m
+15(case)m
+16(by)m
+13(case,)m
+16(below)m
+-2 r 46 c
+cmsy10.300 @sf 62 2584 p 15 c
+c-med.300 @sf 21(ImageWidth)m
+t-rom.300 @sf 18(speci\014es)m
+20(the)m
+18(width)m
+17(of)m
+18(the)m
+18(original)m
+16(image.)m
+33(This)m
+18(should)m
+17(correspond)m
+18(to)m
+18(the)m
+18(width)m
+17(of)m
+18(the)m
+104 2634 p (widest)s
+17(component)m
+17(and,)m
+19(thus,)m
+18(the)m
+18(width)m
+16(of)m
+18(the)m
+17(\\original)m
+16(image".)m
+32(All)m
+17(components)m
+17(have)m
+18(widths)m
+17(roughly)m
+@eop
+%%Page: ? 6
+15 @bop0
+15 @bop1
+t-rom.300 @sf 104 18 p (corresponding)s
+12(to)m
+13(an)m
+14(integer)m
+13(decimation)m
+14(ratio)m
+13(from)m
+13(this)m
+13(speci\014cation.)m
+cmsy10.300 @sf 62 97 p 15 c
+c-med.300 @sf 21(ImageHeight)m
+t-rom.300 @sf 19(speci\014es)m
+21(the)m
+19(height)m
+18(of)m
+19(the)m
+19(tallest)m
+19(component.)m
+35(This)m
+19(corresponds)m
+19(to)m
+19(the)m
+19(height)m
+18(of)m
+19(the)m
+104 147 p (\\original)s
+12(image".)m
+cmsy10.300 @sf 62 227 p 15 c
+c-med.300 @sf 21(-JFIF)m
+t-rom.300 @sf 14(speci\014es)m
+14(that)m
+14 r 97 c
+14(JFIF)m
+14(header)m
+14(is)m
+14(placed)m
+14(on)m
+13(the)m
+14(encoded)m
+14(stream.)m
+19(This)m
+14(is)m
+14(unnecessary)m
+14(for)m
+14(decoding.)m
+cmsy10.300 @sf 62 306 p 15 c
+c-med.300 @sf 21(Q-Factor)m
+t-rom.300 @sf 19(option)m
+17(speci\014es)m
+20 r 97 c
+19(multiplicative)m
+17(factor)m
+19(for)m
+18(the)m
+19(quantization:)m
+27(each)m
+20(quantization)m
+17(coef)m
+(\014cient)s
+104 356 p (of)s
+17(the)m
+17(default)m
+16(matrix)m
+17(is)m
+17(scaled)m
+18(by)m
+17(\(Q-Factor/50\).)m
+28 r 65 c
+17(Q-Factor)m
+18(of)m
+17 r 48 c
+17(is)m
+17(the)m
+17(same)m
+19(thing)m
+15(as)m
+18 r 97 c
+18(Q-Factor)m
+17(of)m
+104 406 p (50)s
+16(because)m
+19(it)m
+16(disables)m
+17(this)m
+16(function.)m
+c-med.300 @sf 27(-q)m
+t-rom.300 @sf 17(speci\014es)m
+18(an)m
+18 r 56 c
+17(bit)m
+15(quantization)m
+16(matrix;)m
+c-med.300 @sf 17(-ql)m
+t-rom.300 @sf 18(speci\014es)m
+18 r 97 c
+17(16)m
+17(bit)m
+104 456 p (quantization)s
+12(matrix,)m
+13(useful)m
+14(for)m
+13(12)m
+13(bit)m
+13(data.)m
+cmsy10.300 @sf 62 535 p 15 c
+c-med.300 @sf 21(-a)m
+t-rom.300 @sf 14(enables)m
+14(the)m
+13(double-precision)m
+12(\015oating)m
+13(point)m
+12(Reference)m
+15(DCT)m
+-2 r 46 c
+13(\(Default)m
+14(is)m
+13(Chen)m
+14(DCT)m
+-2(.\))m
+cmsy10.300 @sf 62 615 p 15 c
+c-med.300 @sf 21(-b)m
+t-rom.300 @sf 14(enables)m
+14(the)m
+13(Lee)m
+16(DCT)m
+-2 r 46 c
+13(\(Default)m
+13(is)m
+13(Chen)m
+14(DCT)m
+-2(.\))m
+cmsy10.300 @sf 62 694 p 15 c
+c-med.300 @sf 21(-d)m
+t-rom.300 @sf 14(enables)m
+14(decoding.)m
+18(See)m
+15(below)m
+-2 r 46 c
+cmsy10.300 @sf 62 773 p 15 c
+c-med.300 @sf 21(-k)m
+25(predictortype)m
+t-rom.300 @sf 14(The)m
+14(lossless)m
+14(predictor)m
+12(type,)m
+14(speci\014ed)m
+14(as)m
+15(an)m
+14(integer)m
+13(between)m
+14(1-7.)m
+cmsy10.300 @sf 62 853 p 15 c
+c-med.300 @sf 21(-n)m
+t-rom.300 @sf 14(This)m
+13(option)m
+12(speci\014es)m
+15(that)m
+13(the)m
+14(\014les)m
+14(should)m
+12(not)m
+13(be)m
+14(transmitted)m
+13(in)m
+13(interleaved)m
+13(format.)m
+cmsy10.300 @sf 62 932 p 15 c
+c-med.300 @sf 21(-o)m
+t-rom.300 @sf 14(signals)m
+13(that)m
+13(the)m
+13(command)m
+15(interpreter)m
+13(will)m
+12(read)m
+14(from)m
+14(the)m
+13(standard)m
+14(input.)m
+cmsy10.300 @sf 62 1012 p 15 c
+c-med.300 @sf 21(-p)m
+t-rom.300 @sf 18(Speci\014es)m
+20(the)m
+18(precision.)m
+32(Normally)m
+17(should)m
+17(be)m
+19(between)m
+19(2-16)m
+17(for)m
+18(lossless;)m
+20 r 56 c
+19(or)m
+18(12)m
+18(for)m
+18(DCT)m
+-2 r 46 c
+17(If)m
+18(it)m
+18(is)m
+104 1062 p (speci\014ed)s
+13(as)m
+12 r 97 c
+13(number)m
+12(greater)m
+12(than)m
+12 r 56 c
+12(then)m
+12(the)m
+11(input)m
+11(is)m
+12(considered)m
+12(to)m
+11(be)m
+13(unsigned)m
+11(shorts)m
+11(\(16)m
+12(bits,)m
+12(msb)m
+12(\014rst\).)m
+104 1112 p (Not)s
+13(aggressively)m
+13(checked.)m
+cmsy10.300 @sf 62 1191 p 15 c
+c-med.300 @sf 21(-t)m
+24(pointtransform)m
+t-rom.300 @sf 14(Speci\014es)m
+14(the)m
+13(shifting)m
+12(\(right\))m
+11(upon)m
+13(loading)m
+12(input)m
+12(and)m
+13(shifting)m
+12(\(left\))m
+12(upon)m
+13(writing)m
+104 1241 p (input.)s
+17(Generally)m
+13(used)m
+14(by)m
+14(the)m
+13(lossless)m
+14(mode)m
+14(only)m
+-2 r 46 c
+17(Can)m
+14(be)m
+14(used)m
+14(by)m
+13(the)m
+14(DCT)m
+13(mode)m
+14(to)m
+14(add)m
+13(or)m
+14(subtract)m
+13(bits.)m
+cmsy10.300 @sf 62 1320 p 15 c
+c-med.300 @sf 21(-y)m
+t-rom.300 @sf 14(for)m
+13(decoding)m
+13(only)m
+-2 r 44 c
+12(signals)m
+13(that)m
+t-ita.300 @sf 13(no)m
+t-rom.300 @sf 14(resynchronization)m
+12(is)m
+14(enabled,)m
+14(thus)m
+13(ignore)m
+13(any)m
+14(markers)m
+14(found)m
+13(in)m
+13(the)m
+104 1370 p (data)s
+14(stream.)m
+cmsy10.300 @sf 62 1450 p 15 c
+c-med.300 @sf 21(-z)m
+t-rom.300 @sf 16(enables)m
+17(use)m
+16(of)m
+16(default)m
+16(Huf)m
+(fman)s
+15(tables.)m
+26(This)m
+16(converts)m
+16(the)m
+16(coding)m
+15(from)m
+16 r 97 c
+16(two-pass)m
+16(system)m
+17(using)m
+15(the)m
+104 1499 p (\014rst)s
+15(pass)m
+15(to)m
+15(generate)m
+16(custom)m
+15(tables)m
+15(to)m
+15 r 97 c
+15(one-pass)m
+16(system)m
+16(using)m
+14(internal)m
+14(default)m
+14(tables.)m
+23 r 87 c
+-1(ith)m
+14(this)m
+14(option,)m
+104 1549 p (the)s
+13(compression)m
+13(speed)m
+14(is)m
+13(nearly)m
+13(doubled,)m
+13(but)m
+12(because)m
+15(the)m
+13(internal)m
+12(tables)m
+13(are)m
+14(not)m
+13(custom)m
+13(to)m
+13(the)m
+13(image,)m
+14(the)m
+104 1599 p (compressed)s
+15(\014le)m
+13(size)m
+15(increases)m
+15(slightly)m
+-3 r 46 c
+cmsy10.300 @sf 62 1678 p 15 c
+c-med.300 @sf 21(ResyncInterval)m
+t-rom.300 @sf 12(speci\014es)m
+14 r 97 c
+13(resync)m
+13(interval)m
+12(for)m
+12(the)m
+12(input)m
+11(\014le{if)m
+12(set)m
+13(to)m
+12 r 48 c
+13(\(default\),)m
+12(resynchronization)m
+11(is)m
+104 1728 p (disabled;)s
+13(otherwise)m
+13(it)m
+13(signi\014es)m
+13(the)m
+13(number)m
+14(of)m
+14(MDU)m
+13(between)m
+14 r 97 c
+15(resync)m
+14(marker)m
+-1 r 46 c
+cmsy10.300 @sf 62 1808 p 15 c
+c-med.300 @sf 21(StreamName)m
+t-rom.300 @sf 15(is)m
+15(the)m
+15(place)m
+16(to)m
+14(load\(decoder\)/store\(encoder\))m
+14(the)m
+15(coded)m
+15(image{if)m
+15(unspeci\014ed)m
+15(it)m
+15(defaults)m
+14(to)m
+c-med.300 @sf 104 1858 p (ComponentFile1.jpg)s
+t-rom.300 @sf 46 c
+cmsy10.300 @sf 62 1937 p 15 c
+t-rom.300 @sf 21(For)m
+13(every)m
+14(component)m
+14(in)m
+13(the)m
+13(image)m
+15(we)m
+14(have:)m
+t-bol.300 @sf 154 2023 p 123 c
+c-med.300 @sf 20(ComponentIndex)m
+t-rom.300 @sf 15(describes)m
+16(the)m
+15(component)m
+15(index)m
+15(where)m
+15(the)m
+15(\014le)m
+16(data)m
+15(should)m
+14(be)m
+16(associated)m
+16(with.)m
+195 2073 p (The)s
+17(possible)m
+15(values)m
+16(are)m
+17(between)m
+17 r 48 c
+16(and)m
+16(255.)m
+25(As)m
+16 r 97 c
+17(rule)m
+15 r 89 c
+17(is)m
+16(in)m
+15(1;)m
+17(Cb)m
+15(\(or)m
+16(U\))m
+16(is)m
+16(in)m
+15(2;)m
+17(Cr)m
+15(\(or)m
+16(V\))m
+16(is)m
+195 2123 p (in)s
+15(3.)m
+24(The)m
+16(\014le)m
+16(spec\014cations,)m
+17(if)m
+15(left)m
+15(undisturbed,)m
+14(will)m
+15(result)m
+15(in)m
+15(component)m
+15(location)m
+14(of)m
+15 r 49 c
+16(for)m
+15(the)m
+15(\014rst)m
+195 2172 p (component)s
+16(\014le,)m
+18 r 50 c
+16(for)m
+17(the)m
+16(second)m
+17(component)m
+16(\014le,)m
+18(and)m
+16(so)m
+17(on.)m
+27(If)m
+c-med.300 @sf 16(-ci)m
+t-rom.300 @sf 17(is)m
+16(speci\014ed)m
+17(for)m
+16(the)m
+17(previous)m
+195 2222 p (component)s
+13(\014le,)m
+15(then)m
+13(the)m
+14(next)m
+13(component)m
+13(index)m
+13(defaults)m
+14(to)m
+13(the)m
+13(previous)m
+13(component)m
+13(index)m
+13(plus)m
+13(1.)m
+t-bol.300 @sf 154 2285 p 123 c
+c-med.300 @sf 20(FrameWidth)m
+t-rom.300 @sf 12(describes)m
+12(the)m
+11(actual)m
+12(width)m
+10(of)m
+11(the)m
+11(component.)m
+18(This)m
+11(should)m
+11(be)m
+11(determinable)m
+12(by)m
+11(the)m
+11(size)m
+195 2335 p (of)s
+11(the)m
+11(original)m
+10(image)m
+12(\(ImageHeight)m
+10(and)m
+12(ImageW)m
+-1(idth\))m
+10(and)m
+11(the)m
+11(frequency)m
+12(sampling)m
+10(of)m
+11(that)m
+11(component.)m
+195 2385 p (However)s
+-1 r 44 c
+16(because)m
+17(the)m
+15(program)m
+16(assumes)m
+17(that)m
+15(the)m
+15(sampling)m
+15(component)m
+15(will)m
+14(round)m
+t-ita.300 @sf 15(up)m
+t-rom.300 @sf 15(to)m
+15(the)m
+15(nearest)m
+195 2435 p (integer)s
+10(and)m
+10(other)m
+10(programs)m
+10(may)m
+10(not)m
+10(necessarily)m
+11(follow)m
+8(that)m
+10(convention,)m
+10(we)m
+10(allow)m
+10(precise)m
+11(speci\014cation)m
+195 2484 p (of)s
+10(the)m
+10(FrameW)m
+-1(idth.)m
+16 r 65 c
+10(speci\014cation)m
+10(that)m
+10(violates)m
+9(logical)m
+9(MDU)m
+10(blocks)m
+9(will)m
+9(\015ag)m
+10(warnings.)m
+17(If)m
+10(necessary)m
+-2 r 44 c
+195 2534 p (for)s
+13(the)m
+14(encoder)m
+-1 r 44 c
+14(additional)m
+12(image)m
+14(space)m
+15(is)m
+14(padded)m
+14(out)m
+13(by)m
+13(pel)m
+14(replication;)m
+12(for)m
+13(the)m
+14(decoder)m
+-1 r 44 c
+14(additional)m
+195 2584 p (image)s
+18(space)m
+19(is)m
+17(padded)m
+18(out)m
+17(by)m
+17(zeroes)m
+19(\(or)m
+17(the)m
+17(default)m
+17(operating)m
+16(system)m
+18(convention)m
+17(for)m
+17(\014lling)m
+16(disk)m
+195 2634 p (\\holes"\).)s
+924 2758 p (15)s
+@eop
+%%Page: ? 7
+16 @bop0
+cmmi10.300 @sf
+[<300380700640380E20380E103807103807101C07001C03801C03801C03800E01C00E01C08E01C0
+  8F01C04701C04681C04E6180381F00> 24 18 -2 0 24.916] 110 @dc
+16 @bop1
+t-bol.300 @sf 154 18 p 123 c
+c-med.300 @sf 20(FrameHeight)m
+t-rom.300 @sf 11(describes)m
+12(the)m
+10(actual)m
+11(height)m
+10(of)m
+11(the)m
+11(component.)m
+17(Multipli)m
+-1(ed)m
+9(together)m
+10(with)m
+10(FrameW)m
+-1(idth,)m
+195 68 p (this)s
+13(should)m
+12(equal)m
+14(the)m
+14(\014le)m
+14(size)m
+14(of)m
+13(the)m
+14(component.)m
+t-bol.300 @sf 154 133 p 123 c
+c-med.300 @sf 20(Hor-Frequency)m
+t-rom.300 @sf 12(speci\014es)m
+14(the)m
+12(block)m
+11(sampling)m
+12(frequency)m
+12(of)m
+12(the)m
+12(component)m
+12(in)m
+11(the)m
+12(horizontal)m
+11(direc-)m
+195 183 p (tion)s
+13(for)m
+13(every)m
+14(MDU)m
+13(transmitted.)m
+t-bol.300 @sf 154 248 p 123 c
+c-med.300 @sf 20(Ver-Frequency)m
+t-rom.300 @sf 11(speci\014es)m
+12(the)m
+10(block)m
+10(sampling)m
+11(frequency)m
+10(of)m
+11(the)m
+10(component)m
+11(in)m
+10(the)m
+10(vertical)m
+11(direction.)m
+195 298 p (When)s
+15(multipli)m
+-1(ed)m
+13(together)m
+13(with)m
+13(the)m
+15(Horizontal)m
+13(frequency)m
+-2 r 44 c
+14(it)m
+13(corresponds)m
+14(to)m
+14(the)m
+14(number)m
+14(of)m
+14(blocks)m
+14(of)m
+195 348 p (that)s
+13(component)m
+14(in)m
+13(the)m
+13(MDU.)m
+t-bol.300 @sf 154 413 p 123 c
+c-med.300 @sf 20(ComponentFile)m
+cmmi10.300 @sf 110 c
+t-rom.300 @sf 14(represents)m
+14(the)m
+14(directory)m
+12(path)m
+14(location)m
+12(of)m
+14(the)m
+cmmi10.300 @sf 13 r 110 c
+t-rom.300 @sf (th)s
+13(component)m
+13(\014le.)m
+t-bol.360 @sf 0 531 p (3.1.1)s
+50(Encoding)m
+19(Examples)m
+t-rom.300 @sf 0 609 p 65 c
+14(command)m
+15(to)m
+13(encode)m
+14 r 97 c
+15(grayscale)m
+14(\(single)m
+13(component\))m
+13(320x200)m
+13(\014le)m
+c-med.300 @sf 14(foobar)m
+t-rom.300 @sf 13(with)m
+13 r 97 c
+15(resynchronization)m
+12(interval)m
+0 659 p (of)s
+13(20)m
+14(is)m
+c-med.300 @sf 0 797 p (jpeg)s
+25(-iw)m
+25(320)m
+25(-ih)m
+25(200)m
+25(foobar)m
+25(-r)m
+25(20)m
+t-rom.300 @sf 62 935 p (which)s
+14(would)m
+12(put)m
+13 r 97 c
+14(1:1)m
+13(interleaved)m
+13(single)m
+13(component)m
+14(JPEG)m
+14(compressed)m
+15(stream)m
+14(into)m
+c-med.300 @sf 13(foobar.jpg)m
+t-rom.300 @sf 46 c
+62 985 p 65 c
+10(command)m
+11(to)m
+10(encode)m
+10 r 97 c
+11(sequence)m
+11(of)m
+10(ten)m
+10(\014les,)m
+c-med.300 @sf 11(dozen1)m
+t-rom.300 @sf 10(through)m
+c-med.300 @sf 9(dozen10)m
+t-rom.300 @sf 10(with)m
+9(the)m
+10(\014rst)m
+9(\014le)m
+11(having)m
+9(frequency)m
+0 1035 p (of)s
+13(12,12)m
+13(\(full)m
+12(size\))m
+14(of)m
+13(dimension)m
+13(1200x1200,)m
+12(the)m
+13(second)m
+14(one)m
+13(having)m
+13(frequency)m
+13(of)m
+13(7,7)m
+14(with)m
+12(size)m
+14(702x702)m
+12(\(some)m
+0 1085 p (extra)s
+14(bits\))m
+12(and)m
+14(the)m
+14(rest)m
+14(having)m
+12 r 97 c
+15(frequency)m
+13(of)m
+14(1,1)m
+14(and)m
+13(dimension)m
+13(100x100)m
+12(to)m
+13(the)m
+14(\014le)m
+c-med.300 @sf 14(HalfDozen)m
+t-rom.300 @sf 14(would)m
+12(use)m
+c-med.300 @sf 0 1223 p (jpeg)s
+25(-iw)m
+25(1200)m
+25(-ih)m
+25(1200)m
+25(-hf)m
+25(12)m
+25(-vf)m
+25(12)m
+25(dozen1\\)m
+0 1273 p (-hf)s
+25 r 55 c
+25(-vf)m
+25 r 55 c
+25(-fw)m
+25(702)m
+25(-fh)m
+25(702)m
+25(dozen2\\)m
+0 1323 p (dozen3)s
+25(dozen4)m
+25(dozen5)m
+25(dozen6)m
+25(dozen7)m
+25(dozen8)m
+25(dozen9)m
+25(dozen10\\)m
+0 1373 p (-s)s
+25(HalfDozen)m
+t-rom.300 @sf 62 1511 p 65 c
+17(command)m
+18(to)m
+16(encode)m
+18 r 97 c
+17(sequence)m
+18(of)m
+17(\014les)m
+17(with)m
+16(dimension)m
+16(128x128)m
+15(in)m
+c-med.300 @sf 17(image.Y)m
+t-rom.300 @sf 59 c
+16(64x128)m
+16(in)m
+c-med.300 @sf 16(image.U)m
+t-rom.300 @sf 59 c
+0 1561 p (64x128)s
+12(in)m
+c-med.300 @sf 13(image.V)m
+t-rom.300 @sf 59 c
+14(to)m
+13(the)m
+14(output)m
+11(\014le)m
+c-med.300 @sf 14(image.jpg)m
+t-rom.300 @sf 14(is)m
+14(given)m
+13(by)m
+c-med.300 @sf 0 1699 p (jpeg)s
+25(-iw)m
+25(128)m
+25(-ih)m
+25(128)m
+25(-hf)m
+25 r 50 c
+25(image.Y)m
+25(image.U)m
+25(image.V)m
+25(-s)m
+25(image.jpg)m
+t-rom.300 @sf 62 1837 p 84 c
+-2 r 111 c
+13(do)m
+14(it)m
+13(losslessly)m
+13(with)m
+12(predictor)m
+13(type)m
+13(7,)m
+14(just)m
+13(add)m
+c-med.300 @sf 14(-k)m
+25 r 55 c
+t-rom.300 @sf 14(to)m
+13(obtain)m
+c-med.300 @sf 0 1976 p (jpeg)s
+25(-iw)m
+25(128)m
+25(-ih)m
+25(128)m
+25(-k)m
+25 r 55 c
+25(-hf)m
+25 r 50 c
+25(image.Y)m
+25(image.U)m
+25(image.V)m
+25(-s)m
+25(image.jpg)m
+t-bol.420 @sf 0 2165 p (3.2)s
+58(Decoder)m
+t-rom.300 @sf 0 2258 p (The)s
+17(decoding)m
+15(parameters)m
+17(are)m
+17(simpler)m
+16(because)m
+17(most)m
+16(of)m
+15(the)m
+16(information)m
+14(is)m
+16(already)m
+16(present)m
+16(in)m
+16(the)m
+16(header)m
+16(of)m
+16(the)m
+0 2307 p (compressed)s
+15(\014le.)m
+19(The)m
+14(decoder)m
+14(is)m
+14(enabled)m
+14(with)m
+12(the)m
+14(\014le)m
+14(speci\014cation)m
+c-med.300 @sf 13(-d)m
+t-rom.300 @sf 46 c
+c-med.300 @sf 0 2446 p (jpeg)s
+25(-d)m
+25([-u])m
+25(-s)m
+25(StreamName)m
+150 2495 p ([ComponentFile1])s
+25([ComponentFile2])m
+25(...)m
+t-rom.300 @sf 62 2634 p (An)s
+14(itemization)m
+12(of)m
+14(these)m
+14(parameters:)m
+924 2758 p (16)s
+@eop
+%%Page: ? 8
+17 @bop0
+17 @bop1
+cmsy10.300 @sf 62 18 p 15 c
+c-med.300 @sf 21(-u)m
+t-rom.300 @sf 14(prevents)m
+13(the)m
+14(noti\014cation)m
+12(line)m
+13(describing)m
+12(the)m
+14(dimensions)m
+13(and)m
+14(the)m
+13(name)m
+15(of)m
+13(the)m
+14(\014le)m
+14(decoded.)m
+cmsy10.300 @sf 62 96 p 15 c
+c-med.300 @sf 21(StreamName)m
+t-rom.300 @sf 14(is)m
+13(the)m
+14(JPEG)m
+14(compressed)m
+15(\014le)m
+14(generated)m
+14(by)m
+13(the)m
+14(encoder)m
+-1 r 46 c
+cmsy10.300 @sf 62 174 p 15 c
+c-med.300 @sf 21(ComponentFile)m
+cmmi10.300 @sf 110 c
+t-rom.300 @sf 15(is)m
+15(where)m
+16(the)m
+15(decoder)m
+16(output)m
+13(is)m
+15(placed.)m
+24(Unless)m
+15(one)m
+15(knows)m
+15(exactly)m
+15(how)m
+15(many)m
+15(com-)m
+104 223 p (ponents)s
+15(are)m
+16(sent)m
+16(over)m
+16(and)m
+16(that)m
+15(they)m
+15(are)m
+17(sent)m
+16(over)m
+15(consecutively)m
+-2 r 44 c
+16(it)m
+15(is)m
+15(rather)m
+16(dif)m
+(\014cult)s
+14(to)m
+15(anticipate)m
+15(where)m
+104 273 p (and)s
+15(in)m
+15(what)m
+15(order)m
+15(to)m
+15(place)m
+16(the)m
+15(component)m
+15(\014lenames.)m
+24(Thus,)m
+17(if)m
+14(they)m
+15(are)m
+16(not)m
+15(speci\014ed,)m
+17(they)m
+15(are)m
+16(placed)m
+15(in)m
+104 323 p (\014les)s
+14(designated)m
+14(by)m
+t-ita.300 @sf 14(Str)m
+-1(eamName.N)m
+t-rom.300 @sf 44 c
+14(where)m
+t-ita.300 @sf 15 r 78 c
+t-rom.300 @sf 14(is)m
+14(the)m
+14(number)m
+15(of)m
+14(the)m
+14(component.)m
+20(Furthermore,)m
+14(should)m
+13(more)m
+104 373 p (than)s
+16(one)m
+16(image)m
+16(be)m
+17(contained)m
+15(in)m
+16(the)m
+16(stream,)m
+18(the)m
+16(subsequent)m
+16(images)m
+16(and)m
+17(components)m
+15(will)m
+15(be)m
+17(put)m
+15(in)m
+16(\014les)m
+t-ita.300 @sf 104 423 p (Str)s
+-1(eamName.M.N)m
+t-rom.300 @sf 16(where)m
+t-ita.300 @sf 17 r 77 c
+t-rom.300 @sf 16(represents)m
+17(the)m
+17(current)m
+16(image)m
+18(index)m
+16(and)m
+t-ita.300 @sf 16 r 78 c
+t-rom.300 @sf 17(represents)m
+17(the)m
+17(component)m
+16(of)m
+16(that)m
+104 472 p (image.)s
+t-bol.360 @sf 0 589 p (3.2.1)s
+50(Decoding)m
+19(Examples)m
+t-rom.300 @sf 0 666 p 84 c
+-2 r 111 c
+13(decode)m
+14(the)m
+14(\014le)m
+c-med.300 @sf 14(foobar.jpg)m
+t-rom.300 @sf 14(into)m
+12(its)m
+13(components,)m
+14(type)m
+c-med.300 @sf 0 794 p (jpeg)s
+25(-d)m
+25(-s)m
+25(foobar.jpg)m
+t-rom.300 @sf 62 922 p (The)s
+17(output)m
+13(will)m
+15(be)m
+15(placed)m
+16(in)m
+15(\014les)m
+c-med.300 @sf 16(foobar.0)m
+29(foobar.1)m
+28(...)m
+t-rom.300 @sf 44 c
+17(the)m
+15(number)m
+15(of)m
+16(which)m
+15(corresponds)m
+15(to)m
+15(as)m
+0 972 p (many)s
+19(\014les)m
+18(transmitted.)m
+32 r 65 c
+18(message)m
+20(will)m
+17(be)m
+19(sent)m
+18(to)m
+18(the)m
+18(standard)m
+18(output)m
+17(unless)m
+18(the)m
+c-med.300 @sf 18(-u)m
+t-rom.300 @sf 18(option)m
+17(was)m
+19(speci\014ed,)m
+0 1022 p (printing)s
+c-med.300 @sf 0 1150 p 62 c
+25(GW:320)m
+50(GH:200)m
+50(R:20)m
+0 1200 p (>>)s
+25(C:0)m
+50(N:foobar.jpg.0)m
+50(W:320)m
+50(H:200)m
+50(hf:1)m
+50(vf:1)m
+0 1250 p (...)s
+t-rom.300 @sf 62 1328 p (In)s
+14(this)m
+12(message,)m
+16(the)m
+14(following)m
+11(keys)m
+14(are)m
+15(used:)m
+cmsy10.300 @sf 62 1406 p 15 c
+t-bol.300 @sf 21(GH:)m
+t-rom.300 @sf 14(Global)m
+13(height:)m
+17(this)m
+12(is)m
+14(the)m
+14(height)m
+12(of)m
+14(the)m
+13(image.)m
+cmsy10.300 @sf 62 1484 p 15 c
+t-bol.300 @sf 21(GW)m
+-1 r 58 c
+t-rom.300 @sf 12(Global)m
+13(width:)m
+16(this)m
+13(is)m
+14(the)m
+13(width)m
+13(of)m
+13(the)m
+14(image.)m
+cmsy10.300 @sf 62 1562 p 15 c
+t-bol.300 @sf 21(C:)m
+t-rom.300 @sf 13(Component)m
+13(number)m
+14(retrieved)m
+13(in)m
+13(the)m
+14(scan.)m
+cmsy10.300 @sf 62 1640 p 15 c
+t-bol.300 @sf 21(N:)m
+t-rom.300 @sf 13(Name)m
+15(of)m
+14(\014le)m
+14(where)m
+14(the)m
+13(component)m
+14(was)m
+14(saved)m
+15(to.)m
+cmsy10.300 @sf 62 1717 p 15 c
+t-bol.300 @sf 21(H:)m
+t-rom.300 @sf 14(The)m
+14(height)m
+13(of)m
+13(the)m
+14(component)m
+13(\014le.)m
+cmsy10.300 @sf 62 1795 p 15 c
+t-bol.300 @sf 21 r 87 c
+-1 r 58 c
+t-rom.300 @sf 12(The)m
+14(width)m
+12(of)m
+14(the)m
+13(component)m
+14(\014le.)m
+cmsy10.300 @sf 62 1873 p 15 c
+t-bol.300 @sf 21(hf:)m
+t-rom.300 @sf 18(The)m
+14(horizontal)m
+12(frequency)m
+14(sampling)m
+13(of)m
+14(the)m
+13(component)m
+14(\014le.)m
+cmsy10.300 @sf 62 1951 p 15 c
+t-bol.300 @sf 21(vf:)m
+t-rom.300 @sf 18(The)m
+14(vertical)m
+13(frequency)m
+14(sampling)m
+13(of)m
+14(the)m
+13(component)m
+13(\014le.)m
+62 2029 p (In)s
+17(the)m
+17(above)m
+17(example,)m
+20(the)m
+17(global)m
+16(\(frame\))m
+17(dimensions)m
+17(are)m
+18(320x200)m
+15(and)m
+17(the)m
+17(\014rst)m
+17(component)m
+17(was)m
+18(saved)m
+17(in)m
+c-med.300 @sf 0 2079 p (foobar.jpg.0)s
+t-rom.300 @sf 14(with)m
+14(dimensions)m
+13(of)m
+14(320x200,)m
+13(thus)m
+14(representing)m
+13 r 97 c
+15(horizontal)m
+13(and)m
+14(vertical)m
+14(sampling)m
+14(frequency)m
+0 2129 p (of)s
+13(1.)m
+62 2178 p (Since)s
+15(the)m
+14(order)m
+14(of)m
+14(transmission)m
+13(for)m
+14(encoding)m
+13(normally)m
+13(increases)m
+16(each)m
+15(subsequent)m
+14(component)m
+14(index)m
+14(by)m
+13(one,)m
+0 2228 p (to)s
+13(decode)m
+15(the)m
+c-med.300 @sf 13(HalfDozen)m
+t-rom.300 @sf 14(\(generated)m
+14(above\))m
+14(into)m
+12(\014les)m
+c-med.300 @sf 14(hd1)m
+t-rom.300 @sf 14(through)m
+c-med.300 @sf 12(hd10)m
+t-rom.300 @sf 14(we)m
+14(can)m
+15(use)m
+c-med.300 @sf 0 2356 p (jpeg)s
+25(-d)m
+25(-s)m
+25(HalfDozen)m
+25(hd1)m
+25(hd2)m
+25(hd3)m
+25(hd3)m
+25(hd4\\)m
+0 2406 p (hd5)s
+25(hd6)m
+25(hd7)m
+25(hd8)m
+25(hd9)m
+25(hd10)m
+t-rom.300 @sf 62 2534 p 84 c
+-2 r 111 c
+13(describe)m
+13(the)m
+13(\014lenames)m
+15(is)m
+13(easy)m
+14(in)m
+12(this)m
+12(case)m
+15(because)m
+15(we)m
+13(already)m
+14(know)m
+12(how)m
+13(many)m
+13(\014les)m
+14(have)m
+13(been)m
+14(encoded.)m
+0 2584 p (However)s
+-1 r 44 c
+16(for)m
+14(those)m
+15(\014lenames)m
+17(without)m
+13(an)m
+16(explicitly)m
+13(designated)m
+15(\014lename,)m
+17(the)m
+15(default)m
+15(\014lename)m
+c-med.300 @sf 16(HalfDozen.i)m
+t-rom.300 @sf 44 c
+0 2634 p (where)s
+c-med.300 @sf 14 r 105 c
+t-rom.300 @sf 14(is)m
+14(the)m
+13(component)m
+13(index,)m
+14(is)m
+13(used.)m
+924 2758 p (17)s
+@eop
+%%Page: ? 9
+18 @bop0
+/Courier /c-med.270 ReEncodeForTeX /c-med.270 /c-med.270 37.499947 TeXPSmakefont def
+18 @bop1
+t-bol.420 @sf 0 18 p (3.3)s
+58(Ranges)m
+22(for)m
+22(parameters)m
+t-rom.300 @sf 0 111 p (The)s
+14(header)m
+15(\014le)m
+14(in)m
+13(JPEG)m
+14(allows)m
+13(the)m
+14(following)m
+11(ranges)m
+14(for)m
+14(the)m
+13(parameters)m
+15(and)m
+14(so)m
+14(does)m
+14(the)m
+13(program.)m
+cmsy10.300 @sf 62 182 p 15 c
+t-rom.300 @sf 21(Number)m
+14(of)m
+13(ComponentFiles)m
+12(per)m
+14(Scan)m
+15(16,)m
+13(Frame)m
+15(256.)m
+cmsy10.300 @sf 62 257 p 15 c
+t-rom.300 @sf 21(ImageW)m
+-1(idth:)m
+17(between)m
+14 r 48 c
+13(and)m
+14(65535.)m
+cmsy10.300 @sf 62 332 p 15 c
+t-rom.300 @sf 21(ImageHeight:)m
+17(between)m
+15 r 48 c
+13(and)m
+14(65535.)m
+cmsy10.300 @sf 62 407 p 15 c
+t-rom.300 @sf 21(FrameW)m
+-1(idth:)m
+17(between)m
+14 r 48 c
+14(and)m
+13(65535.)m
+cmsy10.300 @sf 62 482 p 15 c
+t-rom.300 @sf 21(FrameHeight:)m
+18(between)m
+14 r 48 c
+14(and)m
+13(65535.)m
+cmsy10.300 @sf 62 557 p 15 c
+t-rom.300 @sf 21(HorizontalFrequency:)m
+17(between)m
+14 r 49 c
+13(and)m
+14(15.)m
+cmsy10.300 @sf 62 633 p 15 c
+t-rom.300 @sf 21 r 86 c
+-4(erticalFrequency:)m
+17(between)m
+14 r 49 c
+14(and)m
+14(15.)m
+cmsy10.300 @sf 62 708 p 15 c
+t-rom.300 @sf 21(Number)m
+14(of)m
+13(Quantization)m
+12(tables:)m
+18(between)m
+14 r 48 c
+14(and)m
+14(15.)m
+cmsy10.300 @sf 62 783 p 15 c
+t-rom.300 @sf 21(Number)m
+14(of)m
+13(Huf)m
+(fman)s
+13(tables:)m
+18(between)m
+14 r 48 c
+14(and)m
+13(15.)m
+cmsy10.300 @sf 62 858 p 15 c
+t-rom.300 @sf 21(Resynchronization)m
+12(\(restart\):)m
+17(between)m
+14 r 48 c
+14(and)m
+14(65535.)m
+17(Disabled)m
+14(with)m
+12(0.)m
+62 929 p (JPEG)s
+15(Baseline)m
+13(restricts)m
+14(these)m
+14(values)m
+14(to)m
+13(the)m
+13(following:)m
+cmsy10.300 @sf 62 1001 p 15 c
+t-rom.300 @sf 21(Number)m
+14(of)m
+13(ComponentFiles)m
+12(per)m
+14(Scan)m
+15(10,)m
+13(Frame)m
+15(256.)m
+cmsy10.300 @sf 62 1076 p 15 c
+t-rom.300 @sf 21(ImageW)m
+-1(idth:)m
+17(between)m
+14 r 48 c
+13(and)m
+14(65535.)m
+cmsy10.300 @sf 62 1151 p 15 c
+t-rom.300 @sf 21(ImageHeight:)m
+17(between)m
+15 r 48 c
+13(and)m
+14(65535.)m
+cmsy10.300 @sf 62 1226 p 15 c
+t-rom.300 @sf 21(FrameW)m
+-1(idth:)m
+17(between)m
+14 r 48 c
+14(and)m
+13(65535.)m
+cmsy10.300 @sf 62 1301 p 15 c
+t-rom.300 @sf 21(FrameHeight:)m
+18(between)m
+14 r 48 c
+14(and)m
+13(65535.)m
+cmsy10.300 @sf 62 1376 p 15 c
+t-rom.300 @sf 21(HorizontalFrequency:)m
+17(between)m
+14 r 49 c
+13(and)m
+14(4.)m
+cmsy10.300 @sf 62 1451 p 15 c
+t-rom.300 @sf 21 r 86 c
+-4(erticalFrequency:)m
+17(between)m
+14 r 49 c
+14(and)m
+14(4.)m
+cmsy10.300 @sf 62 1527 p 15 c
+t-rom.300 @sf 21(Number)m
+14(of)m
+13(Quantization)m
+12(tables:)m
+18(between)m
+14 r 48 c
+14(and)m
+14(3.)m
+cmsy10.300 @sf 62 1602 p 15 c
+t-rom.300 @sf 21(Number)m
+14(of)m
+13(Huf)m
+(fman)s
+13(tables:)m
+18(between)m
+14 r 48 c
+14(and)m
+13(1.)m
+cmsy10.300 @sf 62 1677 p 15 c
+t-rom.300 @sf 21(Resynchronization)m
+12(\(restart\):)m
+17(between)m
+14 r 48 c
+14(and)m
+14(65535.)m
+17(Disabled)m
+14(with)m
+12(0.)m
+t-bol.420 @sf 0 1813 p (3.4)s
+58(Return)m
+23 r 86 c
+-4(alues)m
+t-rom.300 @sf 0 1906 p (The)s
+14(return)m
+13(value)m
+14(on)m
+13(successful)m
+15(completion)m
+13(is)m
+13 r 97 c
+14(0.)m
+19(Other)m
+13(values)m
+14(indicate)m
+13(errors)m
+14(as)m
+14(follows:)m
+c-med.270 @sf 0 2019 p (ERROR_)s
+1(NO)m
+1(NE)m
+25 r 48 c
+0 2064 p (ERROR_)s
+1(BO)m
+1(UN)m
+1(DS)m
+25 r 49 c
+271(/*Inpu)m
+1 r 116 c
+25(Values)m
+25(out)m
+24(of)m
+24(bounds)m
+25(*/)m
+0 2110 p (ERROR_)s
+1(HU)m
+1(FF)m
+1(MA)m
+1(N_)m
+1(RE)m
+1(AD)m
+25 r 50 c
+136(/*Huff)m
+1(ma)m
+1 r 110 c
+25(Decode)m
+1 r 114 c
+25(finds)m
+25(bad)m
+24(code)m
+24(*/)m
+0 2156 p (ERROR_)s
+1(HU)m
+1(FF)m
+1(MA)m
+1(N_)m
+1(EN)m
+1(CO)m
+1(DE)m
+25 r 51 c
+91(/*Unde)m
+1(fi)m
+1(ne)m
+1 r 100 c
+25(value)m
+25(in)m
+23(encod)m
+1(er)m
+25(*/)m
+0 2201 p (ERROR_)s
+1(MA)m
+1(RK)m
+1(ER)m
+25 r 52 c
+271(/*Erro)m
+1 r 114 c
+25(Found)m
+25(in)m
+23(Marke)m
+1 r 114 c
+25(*/)m
+0 2247 p (ERROR_)s
+1(IN)m
+1(IT)m
+1(_F)m
+1(IL)m
+1 r 69 c
+25 r 53 c
+203(/*Cann)m
+1(ot)m
+25(initi)m
+1(al)m
+1(iz)m
+1 r 101 c
+25(files)m
+25(*/)m
+0 2293 p (ERROR_)s
+1(UN)m
+1(RE)m
+1(CO)m
+1(VE)m
+1(RA)m
+1(BL)m
+1 r 69 c
+25 r 54 c
+113(/*No)m
+24(recov)m
+1(er)m
+1 r 121 c
+25(mode)m
+24(speci)m
+1(fi)m
+1(ed)m
+25(*/)m
+0 2338 p (ERROR_)s
+1(PR)m
+1(EM)m
+1(AT)m
+1(UR)m
+1(E_)m
+1(EO)m
+1 r 70 c
+25 r 55 c
+113(/*End)m
+25(of)m
+23(file)m
+25(unexpe)m
+1(ct)m
+1(ed)m
+25(*/)m
+0 2384 p (ERROR_)s
+1(MA)m
+1(RK)m
+1(ER)m
+1(_S)m
+1(TR)m
+1(UC)m
+1(TU)m
+1(RE)m
+25 r 56 c
+46(/*Bad)m
+25(Marker)m
+25(Struc)m
+1(tu)m
+1(re)m
+25(*/)m
+0 2430 p (ERROR_)s
+1(WR)m
+1(IT)m
+1 r 69 c
+25 r 57 c
+293(/*Cann)m
+1(ot)m
+25(write)m
+25(outpu)m
+1 r 116 c
+25(*/)m
+0 2475 p (ERROR_)s
+1(RE)m
+1(AD)m
+25(10)m
+294(/*Cann)m
+1(ot)m
+25(write)m
+25(input)m
+25(*/)m
+0 2521 p (ERROR_)s
+1(PA)m
+1(RA)m
+1(ME)m
+1(TE)m
+1 r 82 c
+25(11)m
+181(/*Syst)m
+1(em)m
+25(Param)m
+1(et)m
+1(er)m
+25(Error)m
+25(*/)m
+0 2566 p (ERROR_)s
+1(ME)m
+1(MO)m
+1(RY)m
+25(12)m
+249(/*Memo)m
+1(ry)m
+25(excee)m
+1(de)m
+1 r 100 c
+25(*/)m
+t-rom.300 @sf 924 2758 p (18)s
+@eop
+%%Trailer

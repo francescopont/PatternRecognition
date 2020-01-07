@@ -1,0 +1,20 @@
+To compile the jpeg code on a sun worksation running solaris, I had to do the following...
+
+1) Swap the DEFINES lines in the makefile.
+
+2) Insert the following into "lexer.c" just after the line "#include <stdio.h>".
+
+#ifdef SYSV
+#include <sys/fcntl.h>
+#endif
+
+I changed cc to gcc.
+
+Under Linux I had trouble with FILE *yyin ={stdin}, *yyout ={stdout}; in lexer.c. The
+compiler complained about initializing with something other than a constant. I found
+that I could quickly fix this by initializing with NULL and adding lines in each
+function in lexer.c to check yyin and yyout to see if they are NULL. If they are then
+they need to be set to stdin and stdout respectivly. Those changes are not present
+in the code. You may find a better fix for this problem.
+
+- Michael Heath

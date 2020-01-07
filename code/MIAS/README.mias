@@ -1,0 +1,33 @@
+********************************************************************************
+* File: README.mias
+* Purpose: To briefly describe the contents of this directory.
+* Name: Michael Heath, University of South Florida
+* Date: 6/19/2000
+* Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+********************************************************************************
+This directory contains scripts for running the AFUM mass detection algorithm
+on images from the MIAS database and for computing the performance of the
+algorithm on this data.
+
+The compressed MIAS images (50 microns) are flipped/rotated and the output
+files are renamed for ease of processing by the scripts. This is done with the
+program transpose_MIAS. The MIAS images must be named mdb?????.Z and must
+be compressed because the program decompresses the files with a system call
+to the UNIX compress command and knows the size of the file (#pixels x #lines)
+by the filename. The ground truth file MIAS_TRUTH.txt is read and the ground
+truth locations are output to separate files for each image.
+
+All of the mass detection processing is done by programs that are not
+specialized for MIAS database images. The scoring of detections with the ground
+truth is performed by the program MIASeval because it is specialized to the
+format of the ground truth.
+
+The script evalAFUM_MIAS can be run from a directory containing all of the
+mdb?????.Z images files and the MIAS_TRUTH.txt file. The images will be
+decompressed, flipped/rotated and the mass detection algorithm will be run.
+Two subdirectories will the be created and subsets of the detections and
+ground truth files will be moved into them. These are subsets of images
+that were selected by other researchers for evaluating the performance of
+algorithms. Files named performance.txt will then be created in both
+subdirectories and will contain data that can be plotted to obtain a
+Free-response Receiver Operating Characteristic (FROC) analysis plot.

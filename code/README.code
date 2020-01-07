@@ -1,0 +1,116 @@
+********************************************************************************
+* FILE: README.code
+* NAME: Michael Heath, University of South Florida
+* VERSION: 1.1.0
+* Date 6/22/2000
+* Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+* Note: This release replaces version 1.0.0.
+********************************************************************************
+This file accompanies the newer version of my software that is being
+distributes in the file "heathusf_v1.1.0.tar.gz". This release contains
+everything that was in the previous release "heathusf_v1.0.0.tar.gz" as
+well as new components that 1) allow the mass detection software to be run on
+MIAS database images, 2) computes a "major axis" of the breast in the
+segmentation process, 3) allow the optional conbination of mass suspicion
+between MLO and CC projections and 4) displays images and ground truth
+as well as other graphical information on mammograms (e.g. MammoView).
+
+The following programs were developed by Michael Heath as part of his Ph.D.
+dissertation research in the Computer Vision Laboratory at the University of
+South Florida. These programs perform mass detection and performance evaluation
+for cases in the Digital Database for Screening Mammography
+(http://marathon.csee.usf.edu/Mammography/Database.html). The programs also
+provide a set of tools for extracting image data and ground truth data from
+the files in the DDSM database.
+
+In addition to the code authored by Michael Heath, the following directories
+contain pieces of code from "Graphic Gems" by Academic Press, 1990
+(http://www.acm.org/pubs/tog/GraphicsGems/) and Numerical Recipes in C
+Second Edition (http://www.nr.com/). The code I used was all listed for free
+down load on-line at the time of this writing. However, if you do not have these
+books, you should buy them.
+
+In addition, the jpeg compression program came from the Portable Video Research
+Group at Stanford. I also have included a copy of the decision tree classifier
+c4.5. I have tried to give credit where credit is due. Please forgive any
+missed reference to other peoples work. If such a reference was omitted, it
+was an oversight.
+
+This code is free to use, and distribute as long as it is complete and lists a
+reference to http://marathon.csee.usf.edu/Mammography/software/heathusf.html.
+It should be understood that this code SHOULD NOT BE USED IN ANY MEDICAL SYSTEM,
+IS FOR USE AS IS, MAY NOT BE SOLD, and COMES WITHOUT A WARRANTY OF ANY KIND.
+The purpose of distributing this code is to facilitate comparative work in CAD
+for Mammography. This code is the property of the University of South Florida
+and is copyrighted by Michael D. Heath and Dr. Kevin W. Bowyer.
+
+This code was written in 'C' on a SUN Ultra30 system (SunOS looekey 5.6
+Generic_105181-16 sun4u sparc SUNW,Ultra-30) and uses many scripts to
+handle the flow of processing. Makefiles are used to compile the code
+in each directory. The library in the common directory should be built first.
+You can run the script build_heathusf to build all of the code contained
+in this package.
+
+********************************************************************************
+README.code        This file that you are reading.
+README.pgm         Important information about images stored in the PGM format
+                   and our (pseudo) PGM format for 16bit images.
+README.calibration File containing the data used to formulate the calibration
+                   equations used in this software.
+combinesusp/       Contains code for combining the suspicion of detections sites
+                   in the MLO and CC projections.
+common/            Contains code with is used to build a library of functions.
+compression/       Contains code to decompress the LJPEG images in DDSM.
+segment/           Contains code to segment the breast region.
+AFUM/              Contains code for creating an AFUM feature image that can
+                   be used for mass detection.
+detect/            Contains code for detecting abnormalities using a feature or
+                   probability image.
+performance/       Contains code for assessing the performance of detections.
+template/          Contains code for making an image template from the
+                   DDSM files (.ics and .OVERLAY).
+image/             Contains code for making a reduced size image from an
+                   uncompressed image from the DDSM database. Many rescaling
+                   options are provided.
+draw/              Contains code for drawing the segmented breast boundary,
+                   select ground truth regions from a DDSM ground truth file
+                   (OVERLAY) and select detections on an image.
+scripts/           Contains example scripts.
+MammoView/         A display utility for viewing mammograms. It handles
+                   8 or 16 bit data and remaps it for display. This program
+                   requires the X-lib libraries to build it.
+MIAS/              Contains code and scripts for evaluating the AFUM mass
+                   detection algorithm with two sets of images from the MIAS
+                   database (the images are not provided here).
+********************************************************************************
+
+The programs that are provided in this package were designed to be very general
+purpose. Scripts are used to help automate the processing of mammography cases.
+In fact, one script in the scripts directory (detect_and_FROC_mass) can run a
+mass detection algorithm on an entire set of DDSM cases and evaluate the
+performance of the detection algorithm. To do this, you need to:
+
+1) Build the programs in this package by typing "build_heathusf".
+2) Make a directory somewhere on your system and down load some cases of
+   mammography data from the DDSM web site.
+3) Place yourself in a directory containing cases as subdirectories in your
+   current directory (they must be named caseXXXX as they are in DDSM).
+4) Run the script that automates the detection and performance evaluation.
+   Say you un-tarred this package in your home directory, type
+   ~/yourhome/heathusf/code/scripts/detect_and_FROC_mass
+
+   Each case will be processed (this currently takes about 20 minutes
+   per case on our computers). Once the script has finished running you
+   should have a file named performance.txt that contains the data you
+   could plot to show an FROC curve.
+
+Please send any constructive feedback to me (heath@csee.usf.edu). Good luck
+with this code.
+
+Special thanks to Dr. Melanie Sutton at the University of West Florida
+(msutton@uwf.edu) for helping organize and document this code for distribution.
+
+Michael D. Heath
+Computer Vision Laboratory
+University of South Florida
+heath@csee.usf.edu

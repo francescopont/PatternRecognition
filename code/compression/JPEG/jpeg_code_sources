@@ -1,0 +1,169 @@
+********************************************************************************
+http://www.cis.ohio-state.edu/hypertext/faq/usenet-faqs/html/jpeg-faq/part2/faq-doc-15.html
+
+o[15] Freely available source code for JPEG
+
+Free, portable C code for JPEG compression is available from the Independent
+JPEG Group.  Source code, documentation, and test files are included.
+Version 6a is available from ftp.uu.net:/graphics/jpeg/jpegsrc.v6a.tar.gz.
+If you are on a PC you may prefer ZIP archive format, which you can find at
+ftp.simtel.net:/pub/simtelnet/msdos/graphics/jpegsr6a.zip (or at any
+Simtel mirror site).  On CompuServe, see the Graphics Support forum
+(GO CIS:GRAPHSUP), library 12 "JPEG Tools", file jpegsr6a.zip.
+
+The IJG code includes a reusable JPEG compression/decompression library,
+plus sample applications "cjpeg" and "djpeg", which perform conversion
+between JPEG JFIF format and image files in PPM/PGM (PBMPLUS), GIF, BMP,
+Utah RLE, and Targa formats.  A third application "jpegtran" provides
+lossless transcoding between different JPEG formats --- for example, it can
+convert a baseline JPEG file to an equivalent progressive JPEG file.  Two
+small applications "wrjpgcom" and "rdjpgcom" insert and extract textual
+comments in JFIF files.  The package is highly portable; it has been used
+successfully on many machines ranging from Apple IIs to Crays.
+
+The IJG code is free for both noncommercial and commercial use; only an
+acknowledgement in your documentation is required to use it in a product.
+(See the README file in the distribution for details.)
+
+The IJG code has recently been translated into Pascal --- see
+ftp.simtel.net:/pub/simtelnet/msdos/turbopas/pasjpg10.zip.  This version
+has been tested under Turbo Pascal and Delphi, and it should be portable
+to compatible Pascal compilers.
+
+
+A different free JPEG implementation, written by the PVRG group at Stanford,
+is available from havefun.stanford.edu:/pub/jpeg/JPEGv1.2.1.tar.Z.  The PVRG
+code is designed for research and experimentation rather than production
+use; it is slower, harder to use, and less portable than the IJG code, but
+the PVRG code is easier to understand.  Also, the PVRG code supports (the
+original form of) lossless JPEG, while the IJG code does not.  But PVRG does
+not support progressive JPEG.
+
+There's also a lossless-JPEG-only implementation available from Cornell,
+ftp.cs.cornell.edu:/pub/multimed/ljpg.tar.Z.
+
+Neither the PVRG nor Cornell codecs are being actively maintained, but the
+IJG code is.
+
+********************************************************************************
+http://www.faqs.org/faqs/jpeg-faq/part1/section-13.html
+
+[13] Isn't there a lossless JPEG?
+
+There's a great deal of confusion on this subject, which is not surprising
+because there are several different compression methods all known as "JPEG".
+The commonly used method is "baseline JPEG" (or its variant "progressive
+JPEG").  The same ISO standard also defines a very different method called
+"lossless JPEG".  And if that's not confusing enough, a new lossless
+standard called "JPEG-LS" is about to hit the streets.
+
+When I say "lossless", I mean mathematically lossless: a lossless
+compression algorithm is one that guarantees its decompressed output is
+bit-for-bit identical to the original input.  This is much stronger than
+"visually indistinguishable from the original".  Baseline JPEG can reach
+visual indistinguishability for most photo-like images, but it can never
+be truly lossless.
+
+Lossless JPEG is a completely different method that really is lossless.
+However, it doesn't compress nearly as well as baseline JPEG; it typically
+can compress full-color data by around 2:1.  And lossless JPEG works well
+only on continuous-tone images.  It does not provide useful compression of
+palette-color images or low-bit-depth images.
+
+Lossless JPEG has never been popular --- in fact, no common applications
+support it --- and it is now largely obsolete.  (For example, the new PNG
+standard outcompresses lossless JPEG on most images.)  Recognizing this,
+the ISO JPEG committee recently finished an all-new lossless compression
+standard called JPEG-LS (you may have also heard of it under the name LOCO).
+JPEG-LS gives better compression than original lossless JPEG, but still
+nowhere near what you can get with a lossy method.  It's anybody's guess
+whether this new standard will achieve any popularity.
+
+It's worth repeating that cranking a regular JPEG implementation up to its
+maximum quality setting *does not* get you lossless storage; even at the
+highest possible quality setting, baseline JPEG is lossy because it is
+subject to roundoff errors in various calculations.  Roundoff errors alone
+are nearly always too small to be seen, but they will accumulate if you put
+the image through multiple cycles of compression (see section 10).
+
+Many implementations won't even let you get to the maximum possible setting,
+because it's such an inefficient way to use regular JPEG.  With the IJG JPEG
+software, for example, you have to not only select "quality 100" but also
+turn off chroma downsampling to minimize loss of information.  The resulting
+files are far larger and of only fractionally better quality than files
+generated at more reasonable settings.  And they're still slightly lossy!
+If you really need lossless storage, don't try to approximate it with
+regular JPEG.
+
+********************************************************************************
+http://www.hpl.hp.com/loco/
+
+LOCO-I/JPEG-LS Software Download Page
+
+                               Hewlett-Packard Laboratories
+
+
+
+This page allows you to download a software implementation of JPEG-LS, the emerging
+lossless/near-lossless compression standard for continuous-tone images being developed by ISO/IEC
+JTC1/SC29/WG1 (draft document FCD14495 as of July 1997). The names of the executables in the
+software package derive from the acronym LOCO, as the core of the new standard is based on the
+LOCO-I algorithm (LOw COmplexity LOssless COmpression for Images) developed at Hewlett-Packard
+Laboratories (reference: M. Weinberger, G. Seroussi, G. Sapiro, "LOCO-I: A Low Complexity,
+Context-Based, Lossless Image Compression Algorithm," Proc. IEEE Data Compression Conference,
+Snowbird, Utah, March-April 1996). 
+
+The term "near-lossless compression" refers to a lossy algorithm for which each decompressed image
+sample differs from the corresponding original image sample by not more than a pre-specified value, the
+(usually small) "loss." Lossless compression corresponds to loss=0. Even though the term "continuous-tone
+image" refers in principle to any image whose components have more than one bit per sample, palletized
+images may require a reordering of the color palette for best compression results using LOCO-I on the
+array of color indices. This functionality is not implemented in the present software, although it is supported
+by the new standard, and is easy enough to implement with the tools given. Notice, however, that LOCO-I
+and JPEG-LS were not designed, and might not give optimal performance, for images that have been
+palletized through dithering. 
+
+At various points in the README file, we refer to the CD14495 draft standard. An electronic version of the
+draft is available from the official JPEG Web site (a very nice site worth browsing in any case). 
+
+Comparisons with other lossless image compression schemes. Comparisons with the old lossless JPEG
+(Huffman and arithmetic), CALIC, and FELICS can be found in the DCC paper. Here is a comparison with
+PNG. Notice that there might be slight differences between the compression results reported in the papers
+(especially the DCC one), and results obtained with today's JPEG-LS software. These differences are due
+to modifications undergone by the algorithm during the standardization process. 
+
+
+
+                       LOCO-I/JPEG-LS Implementation V.0.85
+
+(c) COPYRIGHT HEWLETT-PACKARD COMPANY, 1995-1997.
+     HEWLETT-PACKARD COMPANY ("HP") DOES NOT WARRANT THE ACCURACY OR 
+COMPLETENESS OF THE INFORMATION GIVEN HERE.  ANY USE MADE OF, OR 
+RELIANCE ON, SUCH INFORMATION IS ENTIRELY AT USER'S OWN RISK.
+     BY DOWNLOADING THE LOCO-I/JPEG-LS COMPRESSORS/DECOMPRESSORS
+("THE SOFTWARE") YOU AGREE TO BE BOUND BY THE TERMS AND CONDITIONS
+OF THIS LICENSING AGREEMENT.
+     YOU MAY DOWNLOAD AND USE THE SOFTWARE FOR NON-COMMERCIAL PURPOSES
+FREE OF CHARGE OR FURTHER OBLIGATION.  YOU MAY NOT, DIRECTLY OR
+INDIRECTLY, DISTRIBUTE THE SOFTWARE FOR A FEE, INCORPORATE THIS 
+SOFTWARE INTO ANY PRODUCT OFFERED FOR SALE, OR USE THE SOFTWARE 
+TO PROVIDE A SERVICE FOR WHICH A FEE IS CHARGED.
+     YOU MAY MAKE COPIES OF THE SOFTWARE AND DISTRIBUTE SUCH COPIES TO 
+OTHER PERSONS PROVIDED THAT SUCH COPIES ARE ACCOMPANIED BY 
+HEWLETT-PACKARD'S COPYRIGHT NOTICE AND THIS AGREEMENT AND THAT
+SUCH OTHER PERSONS AGREE TO BE BOUND BY THE TERMS OF THIS AGREEMENT.
+     THE SOFTWARE IS NOT OF PRODUCT QUALITY AND MAY HAVE ERRORS OR DEFECTS.
+THE JPEG-LS STANDARD IS STILL UNDER DEVELOPMENT. THE SOFTWARE IS NOT A 
+FINAL OR FULL IMPLEMENTATION OF THE STANDARD.  HP GIVES NO EXPRESS OR 
+IMPLIED WARRANTY OF ANY KIND AND ANY IMPLIED WARRANTIES OF 
+MERCHANTABILITY AND FITNESS FOR PURPOSE ARE DISCLAIMED.
+     HP SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, 
+OR CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE. 
+
+
+By clicking on the button below and entering the download area, I agree to be bound to the terms of the
+above agreement. 
+
+********************************************************************************
+
+

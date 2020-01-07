@@ -1,0 +1,185 @@
+********************************************************************************
+* File: README.pgm
+* Name: Michael Heath, University of South Florida
+* Date: 1/28/2000
+* Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+********************************************************************************
+
+I have written this README file to comment on some issues with the PGM files
+that are created by some programs in this tool box. The PGM format stands for
+the portable gray map file format. This format can support both 8 and 16 bit
+grey scale images. There are two types of PGM files, ASCII and RAW. ASCII PGM
+files begin with "P2" and RAW PGM files begin with "P5".
+
+Images that are 8 bits per pixel can be stored in either format. Only the
+ASCII format can be used for 16bit per pixel images. I believe this is
+because the header information can not store the byte order of the unsigned
+short integer raw data values. Therefore, the file is no longer portable and
+that goes against the very nature of the PORTABLE gray map format.
+
+At some point in the past, people in the Computer Vision Lab here at USF
+started writing our own RAW pseudo PGM files containing 16 bits per pixel.
+I believe it was done because ASCII 16bit PGM files take up to 6 bytes
+per pixel to store an image (that is a lot for Mammography images that
+can be 5000x6000 pixels or larger). Someone found that the popular program
+xv would read these files and display the lower 8-bits of each pixel. Somebody
+then placed an extra return character in the file after the maximum gray value
+and magically xv displayed the upper 8 bits of each 16 bit pixel (not too bad).
+This then started a bad habit of creating these files everywhere because
+they are simple to read and write in a few lines of 'C' code.
+
+I am guilty of continuing this practice (though I don't lose sleep over it).
+When I write pseudo 16bit PGM files I do not place the extra return character
+after the maximum gray value. You can write code to read either file (i.e.
+with or without the extra return in it by reading the PGM header and then
+skipping back from the end of the file 2*cols*rows bytes. Then you can read
+the image data from the file. I suppose I should not encourage others to
+continue this bad practice, sorry about that.)
+
+I have provided the option in most of the programs (except afumfilter) to
+write out the image in TIFF format. There is code in the common directory
+for writing 8 and 16 bit TIFF files. I do not provide code for reading these
+files because I did not want to spend the time it would take to write TIFF
+reading software that would read in all of the types of TIFF files one can
+encounter. You can specify the option to write out TIFF files if you want to.
+
+I have read in the 16-bit TIFF files with xv, display (ImageMagick) and
+MATLAB. The images were correctly read into each program. The program xv
+displayed the upper 8-bits for each pixel and display the lower 8-bits.
+It seems neither of these programs handles 16bit images very well.
+
+Anyway, use the 16bit pseudo PGM files if you want, but please understand
+that they are not real PGM files.
+
+Michael Heath
+1/28/2000
+********************************************************************************
+
+Below is the man page for PGM format images. 
+
+pgm(5)             Headers, Tables, and Macros             pgm(5)
+
+
+
+NAME
+     pgm - portable graymap file format
+
+DESCRIPTION
+     The portable graymap format is a lowest  common  denominator
+     grayscale file format.  The definition is as follows:
+
+     - A "magic number" for identifying the  file  type.   A  pgm
+       file's magic number is the two characters "P2".
+
+     - Whitespace (blanks, TABs, CRs, LFs).
+
+     - A width, formatted as ASCII characters in decimal.
+
+     - Whitespace.
+
+     - A height, again in ASCII decimal.
+
+     - Whitespace.
+
+     - The maximum gray value, again in ASCII decimal.
+
+     - Whitespace.
+
+     - Width * height gray values, each in ASCII decimal, between
+       0  and  the  specified  maximum  value,  separated by whi-
+       tespace, starting at the top-left corner of  the  graymap,
+       proceding  in  normal English reading order.  A value of 0
+       means black, and the maximum value means white.
+
+     - Characters from a "#" to the next end-of-line are  ignored
+       (comments).
+
+     - No line should be longer than 70 characters.
+
+     Here is an example of a small graymap in this format:
+     P2
+     # feep.pgm
+     24 7
+     15
+     0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+     0  3  3  3  3  0  0  7  7  7  7  0  0 11 11 11 11  0  0 15 15 15 15  0
+     0  3  0  0  0  0  0  7  0  0  0  0  0 11  0  0  0  0  0 15  0  0 15  0
+     0  3  3  3  0  0  0  7  7  7  0  0  0 11 11 11  0  0  0 15 15 15 15  0
+     0  3  0  0  0  0  0  7  0  0  0  0  0 11  0  0  0  0  0 15  0  0  0  0
+     0  3  0  0  0  0  0  7  7  7  7  0  0 11 11 11 11  0  0 15  0  0  0  0
+     0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0
+
+     Programs that read this format should be as lenient as  pos-
+     sible,  accepting  anything that looks remotely like a gray-
+     map.
+
+
+
+
+SunOS 5.5           Last change: 18 May 1990                    1
+
+
+
+
+
+
+pgm(5)             Headers, Tables, and Macros             pgm(5)
+
+
+
+     There is also a variant on the format, available by  setting
+     the  RAWBITS  option  at compile time.  This variant is dif-
+     ferent in the following ways:
+
+     - The "magic number" is "P5" instead of "P2".
+
+     - The gray values are stored  as  plain  bytes,  instead  of
+       ASCII decimal.
+
+     - No whitespace is allowed in the grays section, and only  a
+       single  character  of  whitespace (typically a newline) is
+       allowed after the maxval.
+
+     - The files are smaller and many times faster  to  read  and
+       write.
+
+     Note that this raw format can only be used for maxvals  less
+     than or equal to 255.  If you use the _p_g_m library and try to
+     write a file with a larger  maxval,  it  will  automatically
+     fall back on the slower but more general plain format.
+
+SEE ALSO
+     fitstopgm(1), fstopgm(1), hipstopgm(1), lispmtopgm(1), psid-
+     topgm(1),     rawtopgm(1),     pgmbentley(1),    pgmedge(1),
+     pgmenhance(1),    pgmhist(1),     pgmnorm(1),     pgmoil(1),
+     pgmramp(1),    pgmtofits(1),    pgmtofs(1),   pgmtolispm(1),
+     pgmtopbm(1), pgmtops(1), pnm(5), pbm(5), ppm(5)
+
+AUTHOR
+     Copyright (C) 1989, 1991 by Jef Poskanzer.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SunOS 5.5           Last change: 18 May 1990                    2

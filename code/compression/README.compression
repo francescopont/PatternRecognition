@@ -1,0 +1,21 @@
+********************************************************************************
+* File: README.compression
+* Purpose: To describe the contents of this directory.
+* Name: Michael Heath, University of South Florida
+* Date: 1/13/2000
+* Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+********************************************************************************
+This directory contains a script for decompressing each of the LJPEG
+files in the directory it is run from. The jpeg compression binary is
+also in this directory. The source code for the compression program is
+also supplied along with a README file detailing the changes I had to
+make to get it to compile. The source code is in a subdirectory.
+
+Please note that a decompressed LJPEG.1 file is in the native byte order of
+a SUN workstation (big-endian). If you are using a computer with a different
+byte order you will need to swap the bytes for each pixel value in the LJPEG.1
+image files before your programs operate on them.
+
+The programs that I have written to process these images allow a command
+line option -swap to swap the bytes. I have used this option to process
+decompressed LJPEG files from DDSM on my PC running Linux.

@@ -1,0 +1,11 @@
+********************************************************************************
+* File: README.combinesusp
+* Purpose: To briefly describe the contents of this directory.
+* Name: Michael Heath, University of South Florida
+* Date: 6/19/2000
+* Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+********************************************************************************
+This directory contains a program for cobining the suspicion in two detection
+files (from the MLO and CC projections of the same breast) to create
+new detection files that might give better performance. Run the program
+with no arguments to get help on using the program.

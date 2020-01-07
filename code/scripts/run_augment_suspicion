@@ -1,0 +1,170 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: run_augment_suspicion
+# PURPOSE: This script will run a program on each case in the current directory
+# to augment the suspiciousness values of detections by combining the suspicion
+# of detections in the MLO and CC projections.
+#
+# NAME: Michael Heath, University of South Florida
+# DATE: 6/9/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check the command line arguments.
+#-------------------------------------------------------------------------------
+set number_of_arguments = $#
+
+if($number_of_arguments != 3) then
+   echo " "
+   echo "<USAGE> run_augment_suspicion alpha gamma num"
+   echo " "
+   exit
+endif
+
+setenv alpha $1
+setenv gamma $2
+setenv num $3
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+foreach x (`ls -d case????`)
+   cd $x
+
+   echo $x
+
+   #----------------------------------------------------------------------------
+   # Look for the .ics file.
+   #----------------------------------------------------------------------------
+   set case_exists = `ls -1 *.ics >& /dev/null `
+   if ($? != 0) then
+   echo "Error no ICS (.ics) file was found in" {$x} "."
+   cd ..
+   exit
+   endif
+   set ics_file = `ls -1 *.ics`
+   # echo "Will use " {$ics_file} "."
+
+   #----------------------------------------------------------------------------
+   # Get the scanner from the ICS file.
+   #----------------------------------------------------------------------------
+   set scanner = `grep DIGITIZER {$ics_file} | awk '{print $2}'`
+   #echo "The scanner for this case is " {$scanner} "."
+
+   #----------------------------------------------------------------------------
+   # Get the institution that the case was from.
+   #----------------------------------------------------------------------------
+   set institutioncode = `grep filename {$ics_file} | tr "-" " " | awk '{print $2}'`
+   #echo "The institution code is " {$institutioncode} "."
+
+   #----------------------------------------------------------------------------
+   # Find the necessary files and run the combinesusp program to the augment
+   # suspicion of detections and reorder the detections to be in order of
+   # decreasing augmented suspicion. Do the LEFT.
+   #----------------------------------------------------------------------------
+   set MLO_reduced = `ls *LEFT_MLO*.reduced.pgm`
+   set MLO_sgt = `ls *LEFT_MLO*.sgt`
+   set MLO_det = `ls *LEFT_MLO*afum*.det`
+   set CC_reduced = `ls *LEFT_CC*.reduced.pgm`
+   set CC_sgt = `ls *LEFT_CC*.sgt`
+   set CC_det = `ls *LEFT_CC*afum*.det`
+
+   #-------------------------------------------------------------------------------
+   # Run the program to augment (combine) the suspicion of detections. The
+   # resolution of the images depends on the scanner.
+   #-------------------------------------------------------------------------------
+   if({$institutioncode} == 'A') then
+      if({$scanner} == "DBA") then
+   #      echo "The images were scanned on the DBA scanner at MGH."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 294.0 $alpha $gamma $num
+
+      else if({$scanner} == "HOWTEK") then
+   #      echo "The images were scanned on the HOWTEK scanner at MGH."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 304.5 $alpha $gamma $num
+
+      endif
+   else if({$institutioncode} == 'B') then
+   #   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from WFUSM."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 300.0 $alpha $gamma $num
+
+   else if({$institutioncode} == 'C') then
+   #   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from SHH."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 300.0 $alpha $gamma $num
+
+   else if({$institutioncode} == 'D') then
+   #   echo "The images were scanned on the HOWTEK scanner at ISMD and were from WU."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 304.5 $alpha $gamma $num
+
+   endif
+
+   #----------------------------------------------------------------------------
+   # Find the necessary files and run the combinesusp program to the augment
+   # suspicion of detections and reorder the detections to be in order of
+   # decreasing augmented suspicion. Do the RIGHT.
+   #----------------------------------------------------------------------------
+   set MLO_reduced = `ls *RIGHT_MLO*.reduced.pgm`
+   set MLO_sgt = `ls *RIGHT_MLO*.sgt`
+   set MLO_det = `ls *RIGHT_MLO*afum*.det`
+   set CC_reduced = `ls *RIGHT_CC*.reduced.pgm`
+   set CC_sgt = `ls *RIGHT_CC*.sgt`
+   set CC_det = `ls *RIGHT_CC*afum*.det`
+
+   #-------------------------------------------------------------------------------
+   # Run the program to augment (combine) the suspicion of detections. The
+   # resolution of the images depends on the scanner.
+   #-------------------------------------------------------------------------------
+   if({$institutioncode} == 'A') then
+      if({$scanner} == "DBA") then
+   #      echo "The images were scanned on the DBA scanner at MGH."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 294.0 $alpha $gamma $num
+
+      else if({$scanner} == "HOWTEK") then
+   #      echo "The images were scanned on the HOWTEK scanner at MGH."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 304.5 $alpha $gamma $num
+
+      endif
+   else if({$institutioncode} == 'B') then
+   #   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from WFUSM."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 300.0 $alpha $gamma $num
+
+   else if({$institutioncode} == 'C') then
+   #   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from SHH."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 300.0 $alpha $gamma $num
+
+   else if({$institutioncode} == 'D') then
+   #   echo "The images were scanned on the HOWTEK scanner at ISMD and were from WU."
+
+         {$MAMMOCODEDIR}/combinesusp/combinesusp $MLO_reduced $MLO_sgt $MLO_det $CC_reduced $CC_sgt $CC_det 304.5 $alpha $gamma $num
+
+   endif
+
+   cd ..
+end
+
+# end of script run_augment_suspicion

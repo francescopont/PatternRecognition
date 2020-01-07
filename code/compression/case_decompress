@@ -1,0 +1,45 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: case_decompress
+# Purpose: This is a simple script to call the jpeg decompression program on
+# each .LJPEG file in the current directory.
+# Name: Mike Heath
+# Date: 1/13/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+endif
+
+#-------------------------------------------------------------------------------
+# Look for the LJPEG file.
+#-------------------------------------------------------------------------------
+set thisdir = `pwd`
+set ljpeg_exists = `ls -1 *.LJPEG >& /dev/null `
+if ($? != 0) then
+printf "\nError no LJPEG (.LJPEG) files found in directory %s.\n\n" {$thisdir}
+cd ..
+exit
+endif
+
+#-------------------------------------------------------------------------------
+# Decompress all of the LJPEG files in this directory.
+#-------------------------------------------------------------------------------
+foreach x (`ls *.LJPEG`)
+   {$MAMMOCODEDIR}/compression/jpeg -d -s $x
+end

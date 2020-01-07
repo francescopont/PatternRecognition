@@ -1,0 +1,44 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: case_draw_calcifications
+# Purpose: To draw the breast segmentation, selected detections and
+# calcification regions in the ground truth on small images of each mammogram
+# in a case.
+# The images can be created with the mkimage program.
+# Name: Michael Heath, University of South Florida
+# Date: 1/13/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+set number_of_arguments = $#
+
+if($number_of_arguments != 2) then
+   echo " "
+   echo "<USAGE> case_draw_calcifications max#_det suspicious_thresh#"
+   echo " "
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+{$MAMMOCODEDIR}/draw/drawimage -ics *.ics -view LEFT_MLO -image *LEFT_MLO*image.pgm -detection *LEFT_MLO*.det $1 $2 -segment *LEFT_MLO*.sgt -l CALCIFICATION
+{$MAMMOCODEDIR}/draw/drawimage -ics *.ics -view RIGHT_MLO -image *RIGHT_MLO*image.pgm -detection *RIGHT_MLO*.det $1 $2 -segment *RIGHT_MLO*.sgt -l CALCIFICATION
+{$MAMMOCODEDIR}/draw/drawimage -ics *.ics -view LEFT_CC -image *LEFT_CC*image.pgm -detection *LEFT_CC*.det $1 $2 -segment *LEFT_CC*.sgt -l CALCIFICATION
+{$MAMMOCODEDIR}/draw/drawimage -ics *.ics -view RIGHT_CC -image *RIGHT_CC*image.pgm -detection *RIGHT_CC*.det $1 $2 -segment *RIGHT_CC*.sgt -l CALCIFICATION

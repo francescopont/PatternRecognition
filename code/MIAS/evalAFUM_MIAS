@@ -1,0 +1,779 @@
+#!/bin/tcsh -f
+################################################################################
+# File: evalAFUM_MIAS
+# Purpose: This script will process evalaute the AFUM mass detection algorithm
+# using sets of cases from the MIAS database. This script relies on several
+# programs and on other scripts. Two subsets of the MIAS images are used to
+# generate two different performance curves.
+#
+# This script must be run from a directory containing images from the
+# MIAS database (in the 50 micron format).
+#
+# The images are transposed the GT file is read and GT loacations are transposed
+# and are written to separate files for each image. The AFUM mass detection
+# algorithm is applied. Two sets of cases are then formed and the performance
+# assessment software is run on each set.
+#
+# This script is set up to evaluate the performance of the algorithm using two
+# particular subsets of cases from the MIAS database. The AFUM algorithm is
+# run on all of the cases, then two subsets of the cases are created. These
+# match the images used by other researchers. References to the papers are:
+#
+# 1) Te Brake, G.M. and N. Karssemeijer. 1998. Comparison of three mass detection
+# methods. Digital Mammography. Dordrecht, The Netherlands: Kluwer Academic
+# Publishers pp:119-126
+# 2) Sallam M.Y., and K. Bowyer. 1999. Registration and difference analysis of
+# corresponding mammogram images. Medical Image Analysis 3:103-118
+#
+# After the script runs, look at the files:
+#    brakekarssemeijer/performance.txt and sallambowyer/performance.txt
+# they contain the TPF and FP/Im data that can be plotted to create an FROC
+# analysis plot.
+#
+# To run this script you will of course have to obtain the MIAS database.
+# A reference to the database follows:
+# Suckling, J., J. Parker, D. Dance, S. Astley, I. Hutt, C. Boggis, I. Ricketts,
+# E. Stamatakis, N. Cerneaz, S. Kok, P. Taylor, D. Betal and J. Savage. 1994.
+# The mammographic image analysis society digital mammogram database. Exerpta
+# Medica. International Congress Series 1069:375-378. (mias@sv1.smb.man.ac.uk)
+#
+# Name: Michael Heath, University of South Florida
+# Date: 6/9/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check the command line arguments.
+#-------------------------------------------------------------------------------
+set number_of_arguments = $#
+
+if($number_of_arguments != 0) then
+   echo " "
+   echo "<USAGE> evalAFUM_MIAS"
+   echo " "
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Transpose each image. This is done because the programs used to perform the
+# mass detection with the AFUM algorithm assume the side of the mammogram
+# with the pectoral muscle is on the left or right edge of the image.
+#-------------------------------------------------------------------------------
+foreach x (`ls mdb?????.Z`)
+   {$MAMMOCODEDIR}/MIAS/transpose_MIAS $x
+end
+
+#-------------------------------------------------------------------------------
+# Set a variable that can be used to map to optical density.
+#-------------------------------------------------------------------------------
+set MIAS_OD = '-linear 3.200 -0.012549020'
+
+#-------------------------------------------------------------------------------
+# Run the AFUM mass detection algorithm on all of the images.
+#-------------------------------------------------------------------------------
+foreach MIASfilename (`ls mdb*.raw`)
+
+   #-------------------------------------------------------------------------------
+   # Extract some information from the filename.
+   #-------------------------------------------------------------------------------
+   set COLS = `echo $MIASfilename | tr "_" " " | awk '{print $2}'`
+   set ROWS = `echo $MIASfilename | tr "_" " " | awk '{print $3}'`
+   set VIEW = `echo $MIASfilename | tr "_" " " | tr "." " " | awk '{print $4}'`
+
+   echo $MIASfilename $ROWS $COLS $VIEW
+
+   #-------------------------------------------------------------------------------
+   # Segment the breast in the image. Use density thresholds of 3.10 and 0.10.
+   #-------------------------------------------------------------------------------
+   if({$VIEW} == "LMLO") then
+      {$MAMMOCODEDIR}/segment/breastsegment -i $MIASfilename -inp $COLS -inl $ROWS -bpp 1 -microns 50.0 -projection MLO -apex LEFT -thresh 3.1 -uthresh 0.10 $MIAS_OD
+   else if({$VIEW} == "RMLO") then
+      {$MAMMOCODEDIR}/segment/breastsegment -i $MIASfilename -inp $COLS -inl $ROWS -bpp 1 -microns 50.0 -projection MLO -apex RIGHT -thresh 3.1 -uthresh 0.10 $MIAS_OD
+   endif
+
+   #-------------------------------------------------------------------------------
+   # Then run the AFUM filter on the image.
+   #-------------------------------------------------------------------------------
+
+   if({$VIEW} == "LMLO") then
+      {$MAMMOCODEDIR}/AFUM/afumfeature -i $MIASfilename -inp $COLS -inl $ROWS -bpp 1 -microns 50.0 -projection MLO -apex LEFT $MIAS_OD -segment {$MIASfilename}.sgt
+   else if({$VIEW} == "RMLO") then
+      {$MAMMOCODEDIR}/AFUM/afumfeature -i $MIASfilename -inp $COLS -inl $ROWS -bpp 1 -microns 50.0 -projection MLO -apex RIGHT $MIAS_OD -segment {$MIASfilename}.sgt
+   endif
+
+   #-------------------------------------------------------------------------------
+   # Finally, run the detection program on the filtered image. We are now working
+   # at a resolution of 300 microns.
+   #-------------------------------------------------------------------------------
+   {$MAMMOCODEDIR}/detect/detect {$MIASfilename}.afum.pgm {$MIASfilename}.polyscan.pgm 300.0
+
+end
+
+#-------------------------------------------------------------------------------
+# Transpose the ground truth data and make a separate file for each image. The
+# filename "MIAS_TRUTH.txt" is hard coded into the program as the source of the
+# ground truth data.
+#-------------------------------------------------------------------------------
+{$MAMMOCODEDIR}/MIAS/transpose_MIASgt
+
+#-------------------------------------------------------------------------------
+# Copy all of the detection and ground truth files for the Brake and
+# Karssemeijer data set to a subdirectory so we can use them to compute
+# the performance of the AFUM algorithm on that set of images.
+#-------------------------------------------------------------------------------
+mkdir brakekarssemeijer
+cp mdb023ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb028rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb058rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb115ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb117ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb120rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb124rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb125ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb130rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb134rx_4000_5200_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb141lx_4000_5200_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb144rx_4000_5200_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb148rx_4000_5200_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb155ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb158rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb170rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb171ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb178rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb179ls_1600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb181lm_2048_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb184rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb186rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb202rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb206rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb264rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb265lm_2048_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb267ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb270rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb271ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb274rx_4000_5200_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb003ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb004rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb006rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb007ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb008rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb009ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb011ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb014rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb016rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb018rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb020rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb022rm_2048_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb024rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb026rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb027ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb029ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb031ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb033ls_1600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb034rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb035ls_1600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb036rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb037ls_1600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb038rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb039ls_1600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb040rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb041ll_2600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb042rl_2600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb043ls_1600_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb044rs_1600_4320_RMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb045lm_2048_4320_LMLO.raw.afum.pgm.det brakekarssemeijer/.
+cp mdb023ll.gt brakekarssemeijer/.
+cp mdb028rl.gt brakekarssemeijer/.
+cp mdb058rl.gt brakekarssemeijer/.
+cp mdb115ll.gt brakekarssemeijer/.
+cp mdb117ll.gt brakekarssemeijer/.
+cp mdb120rl.gt brakekarssemeijer/.
+cp mdb124rm.gt brakekarssemeijer/.
+cp mdb125ll.gt brakekarssemeijer/.
+cp mdb130rl.gt brakekarssemeijer/.
+cp mdb134rx.gt brakekarssemeijer/.
+cp mdb141lx.gt brakekarssemeijer/.
+cp mdb144rx.gt brakekarssemeijer/.
+cp mdb148rx.gt brakekarssemeijer/.
+cp mdb155ll.gt brakekarssemeijer/.
+cp mdb158rm.gt brakekarssemeijer/.
+cp mdb170rm.gt brakekarssemeijer/.
+cp mdb171ll.gt brakekarssemeijer/.
+cp mdb178rs.gt brakekarssemeijer/.
+cp mdb179ls.gt brakekarssemeijer/.
+cp mdb181lm.gt brakekarssemeijer/.
+cp mdb184rl.gt brakekarssemeijer/.
+cp mdb186rs.gt brakekarssemeijer/.
+cp mdb202rl.gt brakekarssemeijer/.
+cp mdb206rl.gt brakekarssemeijer/.
+cp mdb264rm.gt brakekarssemeijer/.
+cp mdb265lm.gt brakekarssemeijer/.
+cp mdb267ll.gt brakekarssemeijer/.
+cp mdb270rm.gt brakekarssemeijer/.
+cp mdb271ll.gt brakekarssemeijer/.
+cp mdb274rx.gt brakekarssemeijer/.
+cp mdb003ll.gt brakekarssemeijer/.
+cp mdb004rl.gt brakekarssemeijer/.
+cp mdb006rl.gt brakekarssemeijer/.
+cp mdb007ll.gt brakekarssemeijer/.
+cp mdb008rl.gt brakekarssemeijer/.
+cp mdb009ll.gt brakekarssemeijer/.
+cp mdb011ll.gt brakekarssemeijer/.
+cp mdb014rl.gt brakekarssemeijer/.
+cp mdb016rm.gt brakekarssemeijer/.
+cp mdb018rs.gt brakekarssemeijer/.
+cp mdb020rl.gt brakekarssemeijer/.
+cp mdb022rm.gt brakekarssemeijer/.
+cp mdb024rl.gt brakekarssemeijer/.
+cp mdb026rl.gt brakekarssemeijer/.
+cp mdb027ll.gt brakekarssemeijer/.
+cp mdb029ll.gt brakekarssemeijer/.
+cp mdb031ll.gt brakekarssemeijer/.
+cp mdb033ls.gt brakekarssemeijer/.
+cp mdb034rs.gt brakekarssemeijer/.
+cp mdb035ls.gt brakekarssemeijer/.
+cp mdb036rs.gt brakekarssemeijer/.
+cp mdb037ls.gt brakekarssemeijer/.
+cp mdb038rs.gt brakekarssemeijer/.
+cp mdb039ls.gt brakekarssemeijer/.
+cp mdb040rs.gt brakekarssemeijer/.
+cp mdb041ll.gt brakekarssemeijer/.
+cp mdb042rl.gt brakekarssemeijer/.
+cp mdb043ls.gt brakekarssemeijer/.
+cp mdb044rs.gt brakekarssemeijer/.
+cp mdb045lm.gt brakekarssemeijer/.
+
+#-------------------------------------------------------------------------------
+# Copy all of the detection and ground truth files for the Sallam and
+# Bowyer data set to a subdirectory so we can use them to compute
+# the performance of the AFUM algorithm on that set of images.
+#-------------------------------------------------------------------------------
+mkdir sallambowyer
+cp mdb001lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb002rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb003ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb004rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb005ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb006rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb007ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb008rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb009ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb010rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb011ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb012rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb013ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb014rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb017ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb018rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb023ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb024rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb029ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb030rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb031ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb032rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb033ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb034rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb035ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb036rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb037ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb038rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb039ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb040rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb041ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb042rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb043ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb044rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb045lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb046rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb047lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb048rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb049ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb050rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb051ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb052rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb053ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb054rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb055lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb056rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb057ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb058rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb059ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb060rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb061ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb062rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb063lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb064rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb065lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb066rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb067ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb068rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb071lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb072rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb073ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb074rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb075lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb076rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb077ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb078rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb081ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb082rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb083ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb084rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb085lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb086rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb087lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb088rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb089lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb090rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb093lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb094rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb095ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb096rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb097ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb098rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb099lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb100rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb101lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb102rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb103lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb104rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb105ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb106rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb107ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb108rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb109ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb110rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb111ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb112rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb113ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb114rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb115ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb116rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb117ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb118rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb119ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb120rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb121ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb122rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb123lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb124rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb125ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb126rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb127lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb128rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb129ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb130rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb131lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb132rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb133lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb134rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb135lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb136rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb137ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb138rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb139lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb140rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb141lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb142rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb143lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb144rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb145lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb146rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb147lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb148rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb149lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb150rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb151lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb152rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb153lx_4000_5200_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb154rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb155ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb156rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb157lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb158rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb159ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb160rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb161lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb162rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb163ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb164rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb165ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb166rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb167ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb168rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb169lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb170rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb171ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb172rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb173ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb174rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb189ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb190rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb191ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb192rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb193ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb194rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb195ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb196rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb197lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb198rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb199lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb200rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb201ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb202rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb203ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb204rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb205ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb206rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb207lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb208rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb229ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb230rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb243lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb244rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb257ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb258rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb259ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb260rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb261ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb262rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb263lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb264rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb265lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb266rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb267ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb268rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb269lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb270rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb271ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb272rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb273ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb274rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb275ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb276rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb277lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb278rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb279ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb280rx_4000_5200_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb281lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb282rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb283lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb284rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb285lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb286rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb287ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb288rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb289ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb290rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb291ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb292rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb293ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb294rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb297ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb298rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb299ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb300rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb301lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb302rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb303lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb304rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb305lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb306rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb307ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb308rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb309ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb310rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb311ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb312rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb313ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb314rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb315ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb316rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb317ls_1600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb318rs_1600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb319ll_2600_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb320rl_2600_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb321lm_2048_4320_LMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb322rm_2048_4320_RMLO.raw.afum.pgm.det sallambowyer/.
+cp mdb001lm.gt sallambowyer/.
+cp mdb002rl.gt sallambowyer/.
+cp mdb003ll.gt sallambowyer/.
+cp mdb004rl.gt sallambowyer/.
+cp mdb005ll.gt sallambowyer/.
+cp mdb006rl.gt sallambowyer/.
+cp mdb007ll.gt sallambowyer/.
+cp mdb008rl.gt sallambowyer/.
+cp mdb009ll.gt sallambowyer/.
+cp mdb010rm.gt sallambowyer/.
+cp mdb011ll.gt sallambowyer/.
+cp mdb012rl.gt sallambowyer/.
+cp mdb013ll.gt sallambowyer/.
+cp mdb014rl.gt sallambowyer/.
+cp mdb017ls.gt sallambowyer/.
+cp mdb018rs.gt sallambowyer/.
+cp mdb023ll.gt sallambowyer/.
+cp mdb024rl.gt sallambowyer/.
+cp mdb029ll.gt sallambowyer/.
+cp mdb030rm.gt sallambowyer/.
+cp mdb031ll.gt sallambowyer/.
+cp mdb032rl.gt sallambowyer/.
+cp mdb033ls.gt sallambowyer/.
+cp mdb034rs.gt sallambowyer/.
+cp mdb035ls.gt sallambowyer/.
+cp mdb036rs.gt sallambowyer/.
+cp mdb037ls.gt sallambowyer/.
+cp mdb038rs.gt sallambowyer/.
+cp mdb039ls.gt sallambowyer/.
+cp mdb040rs.gt sallambowyer/.
+cp mdb041ll.gt sallambowyer/.
+cp mdb042rl.gt sallambowyer/.
+cp mdb043ls.gt sallambowyer/.
+cp mdb044rs.gt sallambowyer/.
+cp mdb045lm.gt sallambowyer/.
+cp mdb046rm.gt sallambowyer/.
+cp mdb047lm.gt sallambowyer/.
+cp mdb048rm.gt sallambowyer/.
+cp mdb049ll.gt sallambowyer/.
+cp mdb050rl.gt sallambowyer/.
+cp mdb051ll.gt sallambowyer/.
+cp mdb052rm.gt sallambowyer/.
+cp mdb053ls.gt sallambowyer/.
+cp mdb054rs.gt sallambowyer/.
+cp mdb055lm.gt sallambowyer/.
+cp mdb056rm.gt sallambowyer/.
+cp mdb057ll.gt sallambowyer/.
+cp mdb058rl.gt sallambowyer/.
+cp mdb059ls.gt sallambowyer/.
+cp mdb060rs.gt sallambowyer/.
+cp mdb061ls.gt sallambowyer/.
+cp mdb062rs.gt sallambowyer/.
+cp mdb063lm.gt sallambowyer/.
+cp mdb064rm.gt sallambowyer/.
+cp mdb065lm.gt sallambowyer/.
+cp mdb066rm.gt sallambowyer/.
+cp mdb067ll.gt sallambowyer/.
+cp mdb068rl.gt sallambowyer/.
+cp mdb071lm.gt sallambowyer/.
+cp mdb072rm.gt sallambowyer/.
+cp mdb073ls.gt sallambowyer/.
+cp mdb074rs.gt sallambowyer/.
+cp mdb075lm.gt sallambowyer/.
+cp mdb076rm.gt sallambowyer/.
+cp mdb077ll.gt sallambowyer/.
+cp mdb078rl.gt sallambowyer/.
+cp mdb081ll.gt sallambowyer/.
+cp mdb082rl.gt sallambowyer/.
+cp mdb083ll.gt sallambowyer/.
+cp mdb084rl.gt sallambowyer/.
+cp mdb085lm.gt sallambowyer/.
+cp mdb086rm.gt sallambowyer/.
+cp mdb087lm.gt sallambowyer/.
+cp mdb088rm.gt sallambowyer/.
+cp mdb089lm.gt sallambowyer/.
+cp mdb090rm.gt sallambowyer/.
+cp mdb093lm.gt sallambowyer/.
+cp mdb094rm.gt sallambowyer/.
+cp mdb095ll.gt sallambowyer/.
+cp mdb096rl.gt sallambowyer/.
+cp mdb097ll.gt sallambowyer/.
+cp mdb098rl.gt sallambowyer/.
+cp mdb099lm.gt sallambowyer/.
+cp mdb100rm.gt sallambowyer/.
+cp mdb101lm.gt sallambowyer/.
+cp mdb102rm.gt sallambowyer/.
+cp mdb103lm.gt sallambowyer/.
+cp mdb104rm.gt sallambowyer/.
+cp mdb105ll.gt sallambowyer/.
+cp mdb106rl.gt sallambowyer/.
+cp mdb107ll.gt sallambowyer/.
+cp mdb108rl.gt sallambowyer/.
+cp mdb109ll.gt sallambowyer/.
+cp mdb110rl.gt sallambowyer/.
+cp mdb111ll.gt sallambowyer/.
+cp mdb112rl.gt sallambowyer/.
+cp mdb113ls.gt sallambowyer/.
+cp mdb114rs.gt sallambowyer/.
+cp mdb115ll.gt sallambowyer/.
+cp mdb116rl.gt sallambowyer/.
+cp mdb117ll.gt sallambowyer/.
+cp mdb118rl.gt sallambowyer/.
+cp mdb119ll.gt sallambowyer/.
+cp mdb120rl.gt sallambowyer/.
+cp mdb121ll.gt sallambowyer/.
+cp mdb122rl.gt sallambowyer/.
+cp mdb123lm.gt sallambowyer/.
+cp mdb124rm.gt sallambowyer/.
+cp mdb125ll.gt sallambowyer/.
+cp mdb126rl.gt sallambowyer/.
+cp mdb127lm.gt sallambowyer/.
+cp mdb128rm.gt sallambowyer/.
+cp mdb129ll.gt sallambowyer/.
+cp mdb130rl.gt sallambowyer/.
+cp mdb131lx.gt sallambowyer/.
+cp mdb132rx.gt sallambowyer/.
+cp mdb133lx.gt sallambowyer/.
+cp mdb134rx.gt sallambowyer/.
+cp mdb135lx.gt sallambowyer/.
+cp mdb136rx.gt sallambowyer/.
+cp mdb137ll.gt sallambowyer/.
+cp mdb138rl.gt sallambowyer/.
+cp mdb139lx.gt sallambowyer/.
+cp mdb140rx.gt sallambowyer/.
+cp mdb141lx.gt sallambowyer/.
+cp mdb142rx.gt sallambowyer/.
+cp mdb143lx.gt sallambowyer/.
+cp mdb144rx.gt sallambowyer/.
+cp mdb145lx.gt sallambowyer/.
+cp mdb146rx.gt sallambowyer/.
+cp mdb147lx.gt sallambowyer/.
+cp mdb148rx.gt sallambowyer/.
+cp mdb149lx.gt sallambowyer/.
+cp mdb150rx.gt sallambowyer/.
+cp mdb151lx.gt sallambowyer/.
+cp mdb152rx.gt sallambowyer/.
+cp mdb153lx.gt sallambowyer/.
+cp mdb154rx.gt sallambowyer/.
+cp mdb155ll.gt sallambowyer/.
+cp mdb156rl.gt sallambowyer/.
+cp mdb157lm.gt sallambowyer/.
+cp mdb158rm.gt sallambowyer/.
+cp mdb159ll.gt sallambowyer/.
+cp mdb160rl.gt sallambowyer/.
+cp mdb161lm.gt sallambowyer/.
+cp mdb162rm.gt sallambowyer/.
+cp mdb163ll.gt sallambowyer/.
+cp mdb164rl.gt sallambowyer/.
+cp mdb165ls.gt sallambowyer/.
+cp mdb166rs.gt sallambowyer/.
+cp mdb167ll.gt sallambowyer/.
+cp mdb168rl.gt sallambowyer/.
+cp mdb169lm.gt sallambowyer/.
+cp mdb170rm.gt sallambowyer/.
+cp mdb171ll.gt sallambowyer/.
+cp mdb172rl.gt sallambowyer/.
+cp mdb173ll.gt sallambowyer/.
+cp mdb174rl.gt sallambowyer/.
+cp mdb189ll.gt sallambowyer/.
+cp mdb190rl.gt sallambowyer/.
+cp mdb191ls.gt sallambowyer/.
+cp mdb192rs.gt sallambowyer/.
+cp mdb193ll.gt sallambowyer/.
+cp mdb194rl.gt sallambowyer/.
+cp mdb195ll.gt sallambowyer/.
+cp mdb196rl.gt sallambowyer/.
+cp mdb197lm.gt sallambowyer/.
+cp mdb198rm.gt sallambowyer/.
+cp mdb199lm.gt sallambowyer/.
+cp mdb200rm.gt sallambowyer/.
+cp mdb201ll.gt sallambowyer/.
+cp mdb202rl.gt sallambowyer/.
+cp mdb203ll.gt sallambowyer/.
+cp mdb204rl.gt sallambowyer/.
+cp mdb205ll.gt sallambowyer/.
+cp mdb206rl.gt sallambowyer/.
+cp mdb207lm.gt sallambowyer/.
+cp mdb208rm.gt sallambowyer/.
+cp mdb229ll.gt sallambowyer/.
+cp mdb230rl.gt sallambowyer/.
+cp mdb243lm.gt sallambowyer/.
+cp mdb244rm.gt sallambowyer/.
+cp mdb257ll.gt sallambowyer/.
+cp mdb258rl.gt sallambowyer/.
+cp mdb259ll.gt sallambowyer/.
+cp mdb260rl.gt sallambowyer/.
+cp mdb261ls.gt sallambowyer/.
+cp mdb262rs.gt sallambowyer/.
+cp mdb263lm.gt sallambowyer/.
+cp mdb264rm.gt sallambowyer/.
+cp mdb265lm.gt sallambowyer/.
+cp mdb266rm.gt sallambowyer/.
+cp mdb267ll.gt sallambowyer/.
+cp mdb268rl.gt sallambowyer/.
+cp mdb269lm.gt sallambowyer/.
+cp mdb270rm.gt sallambowyer/.
+cp mdb271ll.gt sallambowyer/.
+cp mdb272rl.gt sallambowyer/.
+cp mdb273ll.gt sallambowyer/.
+cp mdb274rx.gt sallambowyer/.
+cp mdb275ll.gt sallambowyer/.
+cp mdb276rl.gt sallambowyer/.
+cp mdb277lm.gt sallambowyer/.
+cp mdb278rm.gt sallambowyer/.
+cp mdb279ll.gt sallambowyer/.
+cp mdb280rx.gt sallambowyer/.
+cp mdb281lm.gt sallambowyer/.
+cp mdb282rm.gt sallambowyer/.
+cp mdb283lm.gt sallambowyer/.
+cp mdb284rm.gt sallambowyer/.
+cp mdb285lm.gt sallambowyer/.
+cp mdb286rm.gt sallambowyer/.
+cp mdb287ls.gt sallambowyer/.
+cp mdb288rs.gt sallambowyer/.
+cp mdb289ls.gt sallambowyer/.
+cp mdb290rs.gt sallambowyer/.
+cp mdb291ll.gt sallambowyer/.
+cp mdb292rl.gt sallambowyer/.
+cp mdb293ll.gt sallambowyer/.
+cp mdb294rl.gt sallambowyer/.
+cp mdb297ll.gt sallambowyer/.
+cp mdb298rl.gt sallambowyer/.
+cp mdb299ll.gt sallambowyer/.
+cp mdb300rl.gt sallambowyer/.
+cp mdb301lm.gt sallambowyer/.
+cp mdb302rm.gt sallambowyer/.
+cp mdb303lm.gt sallambowyer/.
+cp mdb304rm.gt sallambowyer/.
+cp mdb305lm.gt sallambowyer/.
+cp mdb306rm.gt sallambowyer/.
+cp mdb307ll.gt sallambowyer/.
+cp mdb308rl.gt sallambowyer/.
+cp mdb309ll.gt sallambowyer/.
+cp mdb310rl.gt sallambowyer/.
+cp mdb311ll.gt sallambowyer/.
+cp mdb312rl.gt sallambowyer/.
+cp mdb313ll.gt sallambowyer/.
+cp mdb314rl.gt sallambowyer/.
+cp mdb315ll.gt sallambowyer/.
+cp mdb316rl.gt sallambowyer/.
+cp mdb317ls.gt sallambowyer/.
+cp mdb318rs.gt sallambowyer/.
+cp mdb319ll.gt sallambowyer/.
+cp mdb320rl.gt sallambowyer/.
+cp mdb321lm.gt sallambowyer/.
+cp mdb322rm.gt sallambowyer/.
+
+#-------------------------------------------------------------------------------
+# Run the performance analysis software on the cases used by Sallam and Bowyer.
+#-------------------------------------------------------------------------------
+cd sallambowyer
+{$MAMMOCODEDIR}/MIAS/create_FROC_MIAS
+cd ..
+
+#-------------------------------------------------------------------------------
+# Run the performance analysis software on the cases used by Te Brake and
+# Karssemeijer.
+#-------------------------------------------------------------------------------
+cd brakekarssemeijer
+{$MAMMOCODEDIR}/MIAS/create_FROC_MIAS
+cd ..
+
+# End of script evalAFUM_MIAS.

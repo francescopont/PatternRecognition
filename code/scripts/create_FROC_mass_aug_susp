@@ -1,0 +1,165 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: create_FROC_mass_aug_susp
+# PURPOSE: This script automates the performance evaluation for a set of cases.
+# It must reside in the scripts directory, but should be run from a directory
+# containing a set of cases in subdirectories with the subdirectories named
+# case####. There are no arguments to this script. The ics and OVERLAY files
+# must be in each case directory as well as detection files created by
+# the AFUM detection method or by your own software.
+#
+# This script is currently configured uses suspiciousness threshold instead of
+# a fixed number of detections per image from the detection file. The value
+# of the suspiciousness threshold is varied over a range to sweep out the FROC
+# curve.
+#
+# This script is configured to count all BENIGN and MALIGNANT masses in
+# the ground truth as regions that should be detected.
+#
+# The script is also configured to count the first detection in a ground truth
+# region as a true positive detection and all other detections matching the
+# ground truth region as false positives (because the -one flag is used).
+#
+# You can see that this performance evaluation software is very flexible.
+# Please note that if you are assessing the performance of your own algorithms
+# with the goal of comparing the performance to another algorithm, you must
+# configure this script identically for both perfomance assessments.
+#
+# The file that is output is:
+#
+#    performance_aug_st.txt This file has the data you can plot to make the
+#                           FROC curve.
+#
+# Please note that if you have any of these files when you run the script,
+# THEY WILL BE DELETED!!!
+#
+# NAME: Michael Heath, University of South Florida
+# DATE: 6/9/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Set up a range of suspiciousness thresholds we will use in reading detections
+# from each detection file. We are going to use a variable that goes from
+# MINSUSPICION <= # <= MAXSUSPICION to sweep out an FROC curve. We will not be
+# limiting the maximum number of detections per image at all. Another way to
+# sweep out an FROC curve would be to use a range of maximum number of
+# detections per image instead of a range of suspiciousness thresholds. This
+# decision is up to the person evaluating the algorithm. The decision must be
+# made before evaluating an algorithm using the test data because changing the
+# performance method to obtain a better performance would clearly be a bad
+# methodology.
+#-------------------------------------------------------------------------------
+set MINSUSPICION = '90'
+set MAXSUSPICION = '210'
+
+#-------------------------------------------------------------------------------
+# Set up the type of lesions we are going to be using from the DDSM ground
+# truth. Implicitly only MALIGNANT and BENIGN regions are used. Here we are
+# limiting those regions to only lesions that have a type of MASS. We could
+# limit the regions in many other ways. I will provide some examples here.
+#
+# To use only MALIGNANT SPICULATED MASSES:
+# set gtregions = '-mm SPICULATED -pathology MALIGNANT'
+#
+# To use all CALCIFICATIONS that have a CLUSTERED DISTRIBUTION:
+# set gtregions = '-cd CLUSTERED'
+#
+# To use all MALIGNANT lesions:
+# set gtregions = '-pathology MALIGNANT'
+#
+#-------------------------------------------------------------------------------
+set gtregions = '-l MASS'
+
+#-------------------------------------------------------------------------------
+# Check for performance files. If they are present, DELETE THEM!!!
+#-------------------------------------------------------------------------------
+set suspthresh = $MAXSUSPICION
+while($suspthresh >= $MINSUSPICION)
+  \rm performance_{$suspthresh}.txt >& /dev/null
+  set suspthresh = `expr "$suspthresh" - 1`
+end
+\rm performance_aug_st.txt >& /dev/null
+
+#-------------------------------------------------------------------------------
+# Run the performance evaluation on each case using a range of suspiciousness
+# thresholds. This loop will create one file for each value of suspthresh. Note:
+# you could run the performance evaluation just looking for calcifications,
+# spiculated masses, or masses and calcifications by substituting the
+# appropriate line listed below.
+#-------------------------------------------------------------------------------
+set suspthresh = $MAXSUSPICION
+while($suspthresh >= $MINSUSPICION)
+
+  foreach x (`ls -d case????`)
+     cd $x
+
+      #-------------------------------------------------------------------------
+      # Look for the .ics file.
+      #-------------------------------------------------------------------------
+      set case_exists = `ls -1 *.ics >& /dev/null `
+      if ($? != 0) then
+      echo "Error no ICS (.ics) file was found in" {$casedir} "."
+      cd ..
+      exit
+      endif
+      set ics_file = `ls -1 *.ics`
+      # echo "Will use " {$ics_file} "."
+
+      {$MAMMOCODEDIR}/performance/DDSMeval -ics $ics_file -view LEFT_MLO $gtregions -det *LEFT_MLO*afum*.augdet -st $suspthresh -one >> ../performance_{$suspthresh}.txt
+      {$MAMMOCODEDIR}/performance/DDSMeval -ics $ics_file -view RIGHT_MLO $gtregions -det *RIGHT_MLO*afum*.augdet -st $suspthresh -one >> ../performance_{$suspthresh}.txt
+      {$MAMMOCODEDIR}/performance/DDSMeval -ics $ics_file -view LEFT_CC $gtregions -det *LEFT_CC*afum*.augdet -st $suspthresh -one >> ../performance_{$suspthresh}.txt
+      {$MAMMOCODEDIR}/performance/DDSMeval -ics $ics_file -view RIGHT_CC $gtregions -det *RIGHT_CC*afum*.augdet -st $suspthresh -one >> ../performance_{$suspthresh}.txt
+
+     cd ..
+  end
+
+  set suspthresh = `expr "$suspthresh" - 2`
+end
+
+#-------------------------------------------------------------------------------
+# Calculate the true positive fraction and average number of false positives
+# per image for each value of maxdet.
+#-------------------------------------------------------------------------------
+echo "IMAGES SUMTRUEPOS SUMFALSEPOS SUMFALSENEG SUMTP+SUMFN TRUEPOSFRACT NUMFPPERIMAGE" >> performance_aug_st.txt
+set suspthresh = $MAXSUSPICION
+while($suspthresh >= $MINSUSPICION)
+
+   cat performance_{$suspthresh}.txt | awk '{tp+=$1}{fp+=$2}{fn+=$3}{cnt+=1}END{if((tp+fn) != 0) {printf "%6s %10s %11s %11s %11s %12s %13s\n", cnt, tp, fp, fn, tp+fn, tp/(tp+fn), fp/cnt} else {printf "%6s %10s %11s %11s %11s %12s %13s\n", cnt, tp, fp, fn, tp+fn, 0, fp/cnt}}' >> performance_aug_st.txt
+
+  set suspthresh = `expr "$suspthresh" - 2`
+end
+
+#-------------------------------------------------------------------------------
+# Append the detection score files to the performance.txt file and then delete
+# them.
+#-------------------------------------------------------------------------------
+set suspthresh = $MAXSUSPICION
+while($suspthresh >= $MINSUSPICION)
+
+   cat performance_{$suspthresh}.txt >> performance_aug_st.txt
+   \rm performance_{$suspthresh}.txt
+
+   set suspthresh = `expr "$suspthresh" - 2`
+end
+
+# end of script create_FROC_mass_aug_susp

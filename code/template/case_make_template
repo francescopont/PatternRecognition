@@ -1,0 +1,44 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: case_make_template
+# Purpose: This can be used to run make templates for all of the OVERLAY file
+# in a DDSM case. This script uses the default values of mktemplate so
+# only regions that have a PATHOLOGY of MALIGNANT or BENIGN are rendered in
+# the template.
+# Name: Michael Heath, University of South Florida
+# Date: 1/13/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+set number_of_arguments = $#
+
+if($number_of_arguments != 1) then
+   echo " "
+   echo "<USAGE> case_make_template file.ics"
+   echo " "
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+{$MAMMOCODEDIR}/template/mktemplate -ics *.ics -view LEFT_MLO
+{$MAMMOCODEDIR}/template/mktemplate -ics *.ics -view RIGHT_MLO
+{$MAMMOCODEDIR}/template/mktemplate -ics *.ics -view LEFT_CC
+{$MAMMOCODEDIR}/template/mktemplate -ics *.ics -view RIGHT_CC

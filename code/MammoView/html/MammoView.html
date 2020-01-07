@@ -1,0 +1,211 @@
+<HTML>
+<HEAD>
+<LINK REV="made" HREF="mailto:heath@grad.csee.usf.edu">
+<TITLE>MammoView: Mammography Image Display Tool</TITLE>
+</HEAD>
+
+<BODY bgcolor="#FFFBF0" link="#238E23" alink="#CC7F32" vlink="#CC7F32">
+
+<!-- BODY BGCOLOR="#191970" TEXT="#ffffff" LINK="#0000ee" VLINK="#0000ee"
+ALINK="#ff0000" -->
+<a href="http://www.usf.edu/"><img border=0 width=312 height=33 src="logo.gif" alt="USF"></a>
+
+
+<BODY>
+<CENTER><H2>MammoView: Mammography Image Display Tool</H2></CENTER>
+
+<FONT COLOR="#FF0000">The MammoView program will be available by mid-August 2000. I
+am cleaning up the source code for the latest version.</FONT>
+
+<CENTER>
+<TABLE BORDER=10>
+<TR><TD>
+<IMG SRC="MammoView_small.jpg">
+</TD></TR>
+</TABLE>
+</CENTER>
+
+<P>
+The program MammoView was written by Mike Heath to view Mammography images in
+the Digital Database for Screening Mammography (DDSM) database at the University
+of South Florida (http://marathon.csee.usf.edu/Mammography.html). This program
+was not written as part of the grant that funded the creation of the database,
+rather it was written as a tool for use in my dissertation research.
+</P>
+
+<P>
+MammoView will display images in the ICS format used in DDSM, in the format
+used by the DBA 21 scanner, in the format used by the HOWTEK 760 scanner,
+images in raw format (using user specified geometry values) and images in
+8 or 16 bit PGM format.
+</P>
+
+<P>
+Invoking MammoView with no arguments will display the usage of the program.
+When .dba, .pgm or .dcm images are displayed, no variables describing the
+image geometry are needed because that information is read from the file.
+If raw images (i.e. images with no header or images with some other format)
+are used, the variables specifying the image geometry must be specified.
+When .ics files are used, the -view flag must be used to specify which of
+the four images are to be displayed. When the program in run, pressing
+the right button on the displayed image will toggle the main menu on an
+off.
+</P>
+
+<PRE>
+         ------------------------------------------------------------ 
+
+MammoView -i filename | -ics file.ics -view VIEW [-inp #pixels]
+             [-inl #lines] [-bpp #bytesperpixel] [-hb #headerbytes]
+             [-swap_bytes] [-sr sample_rate] [-w width] [-h height]
+             [-view whichview] [-direction DIRval] [-intensity]
+             [-density] [-verbose] [-ws #bits] [-manywin] [-version]
+             [-segmentation file.sgt] [-detection file.det max#det suspthresh]
+             [-l MASS | CALCIFICATION] [-pathology MALIGNANT | BENIGN]
+
+   Mandatory Arguments:
+   -------------------
+   -i filename         = Input image (filename.dba, filename.ics or filename.pgm).
+       --- or ---
+   -ics filename -view VIEW = List the ics filename and view may be any of
+                 (RIGHT_MLO, RIGHT_CC, LEFT_MLO or LEFT_CC)
+
+   Optional Arguments:
+   -------------------
+   -inp #pixels        = Number of pixels per line of the image.
+   -inl #lines         = Number of lines in the image.
+   -bpp #bytesperpixel = Number of bytes per pixel (1 or 2, default is 1). 
+   -hb #headerbytes    = Number of header bytes in the image (default is 0).
+   -swap_bytes         = Swap the bytes when reading from or writing to the file.
+   -sr sample_rate     = Pixel sample rate in microns/pixel.
+   -w width            = Width of the fullresolution window.
+   -h height           = Height of the fullresolution window.
+   -view whichview     = LEFT_CC, LEFT_MLO, RIGHT_CC or RIGHT_MLO.
+   -direction DIRval   = Viewing film looking "TOWARD_SOURCE" or "AWAY_FROM_SOURCE"
+   -intensity          = Work in intensity.
+   -density            = Work in scaled density (DBA, LUMISYS, HOWTEK or HOWTEK_ISMD).
+   -verbose            = Print out information for debugging.
+   -ws #bits           = Workstation bits (8 or 24).
+   -manywin            = Start the program displaying many windows.
+   -version            = Print out the version number and exit.
+   -ics FILE -view VIEW = Allows the ground truth to be used when -i is used.
+   -segmentation file  = Allows the breast segmentation and axis to be displayed.
+   -detection file # # = Allows the detections to be displayed on the image. The
+                         first # is the max detections to use and the second is
+                         the suspiciousness threshold to apply.
+
+         ------------------------------------------------------------ 
+</PRE>
+
+<P>
+The -ws flag is used to specify whether the workstation on which the program
+is being run is set up for 8 or 24 bit color. This determines whether or not a
+private color map is allocated by the program.
+</P>
+
+<P>
+Source code is now available for this program, and the program comes "AS IS".
+Previously only an executable version of the program was being distributed.
+</P>
+
+<HR WIDTH=100%>
+
+<B>Currently the program will:</B>
+
+<UL>
+<LI> display 8 or 16 bit images in several formats on 8 or 24 bit SUN workstations.
+<LI> interactively rescale the image.
+<LI> calculate the area and image statistics for a simple interactively specified polygonal ROI.
+<LI> display pixel values.
+<LI> aggregate the image by several factors to "zoom out".
+<LI> display the ground truth chain codes for DDSM cases.
+<LI> sharpen the displayed portion of the image using unsharp masking.
+<LI> save the displayed portion of an image in PPM or 16bit PGM format.
+<LI> map DDSM images to be scaled linearly with optical density.
+</UL>
+
+<HR WIDTH=100%>
+
+<IMG ALIGN=RIGHT VSPACE=20 SRC="MammoView_main_menu.jpg">
+
+<P>
+<B>Basic instructions for using this program are as follows: </B>
+
+<UL>
+<LI>When the program is invoked, a window will pop-up on the screen
+displaying a section of the image at full resolution. Pressing
+the RIGHT mouse button in this window will toggle the MAIN MENU
+on and off.
+<LI>Pressing the "FULLRES", "2X AGG", "4X AGG", or "8X AGG" buttons
+will change the "zoom" of the image to allow you to see more or less
+of the image on the screen.
+<LI>If DDSM case (.ics file) is being viewed and an OVERLAY file exists for
+the displayed image, then there will be a button labeled "OVERLAY"
+on the MAIN MENU. Otherwise the button will be labeled "NO OVERLAY".
+Pressing the overlay button will toggle the display of the chain
+codes, on and off.
+<LI>The "SAVE" button will prompt the user for filenames for saving
+the displayed portion of the image to PPM (in color) and to 16-bit
+PGM files. This can be used for extracting a portion of the image. The
+prompting for the filenames occurs in the shell from which MammoView
+was invoked.
+<LI>The "PIX VALUE" button sets MammoView in a mode where pixel values
+are displayed when the LEFT mouse button is pressed in the image window.
+<LI> The "REGION AVG" button sets MammoView in a mode where the image
+statistics can be computed for a polygonal region of interest in the image. The
+LEFT mouse button places vertices of the polygon and the RIGHT mouse
+button closes the polygon.
+<LI>The "SHARPEN" button applies unsharp masking to sharpen the displayed
+portion of the image.
+<LI>The "OVERVIEW" button toggles on and off the display of a window
+showing a version of the full image. Pressing a mouse button in the overview
+image window selects a subsection of the image for display.
+<LI>The "HISTOGRAM" button toggles on and off the display of the histogram
+of the portion of the image that is currently displayed. Pressing the
+mouse buttons on the displayed histogram will rescale the image values.
+The white line shown under the x-axis on the plot shows the clipping
+range used in scaling (and clipping) the image values. The image is linearly
+rescaled to the range 0->255 over the range of the white bar. For example,
+in the image displayed below, grey level assiciated with optical density 2.448 is mapped to 0 and grey level
+associated with optical density 0.638 is mapped to 255. Any values outside this range will be clipped
+to black or white. Pressing the LEFT mouse button will change
+the lower clip value and pressing the RIGHT mouse button will change the
+upper clip value. Pressing the MIDDLE mouse button will apply the current
+mapping to the overview image.
+</UL>
+</P>
+<CENTER><IMG SRC="MammoView_histogram.jpg"></CENTER>
+
+<BR CLEAR=RIGHT>
+<HR WIDTH=100%>
+
+<P>
+The program was written in 'C' using the XWindows library. It was compiled on a
+Sun ULTRA-30 workstation with 128MB of RAM using gcc.
+</P>
+
+<P>
+The MammoView program relies on a separate image compression program named jpeg.
+An environment variable must be set so the MammoView program knows the location
+of the jpeg executable file so it can invoke the program with a system call.
+The command setenv JPEG_PROGRAM "/home/captiva1/heath/bin/jpeg" works on my
+system because that is where I placed the jpeg program.
+</P>
+
+<P>
+I will accept and appreciate constructive feedback on your experience
+with this program.
+</P>
+
+MammoView is part of a larger set of software that is will be made available by mid-August 2000.
+
+<HR WIDTH=100%>
+Michael Heath<br>
+Department of Computer Science and Engineering<br>
+University of South Florida<br>
+<A HREF="MAILTO:heath@csee.usf.edu">heath@csee.usf.edu</A><br>
+<A HREF="http://marathon.csee.usf.edu/~heath/index.html">http://marathon.csee.usf.edu/~heath/index.html</A><br>
+This page was last updated on June 21, 2000.
+</BODY>
+</HTML>
+

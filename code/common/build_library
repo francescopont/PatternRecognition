@@ -1,0 +1,14 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: build_library
+# Purpose: This script is used to build a library that will hold common
+# code used by some mammogram processing programs.
+# Name: Mike Heath
+# Date: 1/13/2000
+################################################################################
+\rm *.o libmammo.a
+foreach x (`ls *.c`)
+   gcc -O2 -c $x
+end
+ar -cr libmammo.a *.o
+ranlib libmammo.a

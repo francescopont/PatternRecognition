@@ -1,0 +1,60 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: detect_and_FROC_mass
+# PURPOSE: This script automates the entire detection and performance
+# evaluation for a set of cases. It must reside in the scripts directory,
+# but should be run from a directory containing a set of cases in
+# subdirectories with the subdirectories named case####. There are no
+# arguments to this script. The OVERLAY files are not needed in the case
+# directories while the detection is done, but they must be in the directories
+# when the performance evaluation is done. Several files are output. They are:
+#
+#    performance_#.txt   where 1<=#=NUMDET
+#    performance.txt     This file has the data you can plot to make the
+#                        FROC curve.
+#
+# Please note that if you have any of these files when you run the script,
+# THEY WILL BE DELETED!!!
+#
+# NAME: Michael Heath, University of South Florida
+# DATE: 1/23/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Run the AFUM detection algorithm on each case.
+#-------------------------------------------------------------------------------
+foreach x (`ls -d case????`)
+   printf "Running the AFUM mass detection program on %s.\n" $x
+   {$MAMMOCODEDIR}/scripts/runAFUMcase $x
+end
+
+#-------------------------------------------------------------------------------
+# Run the performance evaluation on each case using a range of maximum
+# allowable detections from 1 to NUMDET for image.
+#-------------------------------------------------------------------------------
+printf "Computing the performance of the AFUM mass detection program.\n"
+{$MAMMOCODEDIR}/scripts/create_FROC_mass
+
+printf "Finished computing the performance of the AFUM detection algorithm.\n\n"
+
+# end of script detect_and_FROC_mass

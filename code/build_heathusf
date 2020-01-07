@@ -1,0 +1,135 @@
+#!/bin/tcsh -f
+################################################################################
+# File: build_usfcvlmammo
+# Purpose: Executing this script will (with a little luck) compile all of the
+# code in this toolbox and build several executable programs.
+# Name: Michael Heath, University of South Florida
+# Date: 6/9/2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Compile all of the code in the common directory. Then build a library.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Compiling programs to build a library of image processing functions."
+cd common
+./build_library
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile the software to resize images.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the mammogram resizing program."
+cd image
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile the breast segmentation program.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the breast segmentation program."
+cd segment
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile average fraction under the minimum feature generation program that
+# can be used to generate a feature image for mass detection.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the mass feature generation program."
+cd AFUM
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile a detection program that can create a detection file from a
+# suspiciousness image such as one produced by the program afumfeature.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the mass detection program."
+cd detect
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile a program for evaluating a detection algorithm.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the performance evaluation program."
+cd performance
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile a program for creating a template for the ground truth files in the
+# Digital Database for Screening Mammography.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the template creation program."
+cd template
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile a program for creating program to draw various pieces of information
+# on an image.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the drawimage program."
+cd draw
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile a program for combining the suspicion of detection sites between
+# MLO and CC images.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the combinesusp program."
+cd combinesusp
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile program for transposing MIAS images and ground truth. Also compile
+# a program for scoring detections for MIAS database images.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the MIAS programs."
+cd MIAS
+make
+gcc -o transpose_MIAS transpose_MIAS.c
+gcc -o transpose_MIASgt transpose_MIASgt.c
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile a program for combining the suspicion of detection sites between
+# MLO and CC images.
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the MammoView program. This uses X-libraries so you may need to"
+echo "reconfigure the makefile for your system."
+cd MammoView
+make
+cd ..
+
+#-------------------------------------------------------------------------------
+# Compile the compression/decompression program jpeg. Then move it to the
+# directory where we will use it. This will likely be the hardest program to
+# compile on your system. This code did not come from USF and we had to
+# work to get it to compile on our system.            - Michael Heath
+#-------------------------------------------------------------------------------
+echo ""
+echo "Building the compression/decompression program jpeg."
+cd compression
+\rm jpeg
+cd ..
+cd compression/JPEG/PVRG/jpegdir
+make
+cp jpeg ../../../.
+cd ../../../../
+cd ..
+echo ""

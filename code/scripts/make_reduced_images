@@ -1,0 +1,136 @@
+#!/bin/tcsh -f
+################################################################################
+# File: make_reduced_images
+# Purpose: This script will make reduced resolution images at a specified
+# resolution. The script is configured to output the images in 8-bit resolution
+# be rescaling the images in an optical density range of 3.0 to 0.05. It is
+# assumed that the DDSM images are compressed. This script will process every
+# case that is in a subdirectory of the directory you are in when you run the
+# script.
+# Name: Michael Heath, University of South Florida
+# Date: 1/30/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check the command line arguments.
+#-------------------------------------------------------------------------------
+set number_of_arguments = $#
+
+if($number_of_arguments != 1) then
+   echo " "
+   echo "<USAGE> make_reduced_images resolution"
+   echo " "
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Set variables that can be used to map to optical density. These are the
+# calibration unctions for the four scanners used in the DDSM database.
+#-------------------------------------------------------------------------------
+set DBA_OD = '-log10 4.26700423014133 -0.90303289757264'
+set LUMISYS_OD = '-linear 4.05977749300340 -0.00099080941710'
+set ISMD_HOWTEK_OD = '-linear 3.96604095240593 -0.00099055807612'
+set MGH_HOWTEK_OD = '-linear 3.78928997845071 -0.00094568009377'
+
+#-------------------------------------------------------------------------------
+# Set the range of optical densities we want to use.
+#-------------------------------------------------------------------------------
+set scalerange = '-scale 3.00 0.05'
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+foreach casedir (`ls -d case????`)
+
+   cd $casedir
+
+   #----------------------------------------------------------------------------
+   # Look for the .ics file.
+   #----------------------------------------------------------------------------
+   set case_exists = `ls -1 *.ics >& /dev/null `
+   if ($? != 0) then
+   echo "Error no ICS (.ics) file was found in" {$casedir} "."
+   cd ..
+   exit
+   endif
+   set ics_file = `ls -1 *.ics`
+   # echo "Will use " {$ics_file} "."
+
+   #----------------------------------------------------------------------------
+   # Get the scanner from the ICS file.
+   #----------------------------------------------------------------------------
+   set scanner = `grep DIGITIZER {$ics_file} | awk '{print $2}'`
+   #echo "The scanner for this case is " {$scanner} "."
+
+   #----------------------------------------------------------------------------
+   # Get the institution that the case was from.
+   #----------------------------------------------------------------------------
+   set institutioncode = `grep filename {$ics_file} | tr "-" " " | awk '{print $2}'`
+   #echo "The institution code is " {$institutioncode} "."
+
+   #----------------------------------------------------------------------------
+   # Decompress the images in the case.
+   #----------------------------------------------------------------------------
+   {$MAMMOCODEDIR}/compression/case_decompress
+
+   #----------------------------------------------------------------------------
+   # Create an 8bit scaled image of the desired resolution for each image then
+   # overlay the ground truth and detections.
+   #----------------------------------------------------------------------------
+
+   if({$institutioncode} == 'A') then
+      if({$scanner} == "DBA") then
+   #      echo "The images were scanned on the DBA scanner at MGH."
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_MLO $DBA_OD $scalerange -8bit -outmicrons $1
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_MLO $DBA_OD $scalerange -8bit -outmicrons $1
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_CC $DBA_OD $scalerange -8bit -outmicrons $1
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_CC $DBA_OD $scalerange -8bit -outmicrons $1
+      else if({$scanner} == "HOWTEK") then
+   #      echo "The images were scanned on the HOWTEK scanner at MGH."
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_MLO $MGH_HOWTEK_OD $scalerange -8bit -outmicrons $1
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_MLO $MGH_HOWTEK_OD $scalerange -8bit -outmicrons $1
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_CC $MGH_HOWTEK_OD $scalerange -8bit -outmicrons $1
+         {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_CC $MGH_HOWTEK_OD $scalerange -8bit -outmicrons $1
+      endif
+   else if({$institutioncode} == 'B') then
+   #   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from WFUSM."
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_MLO $LUMISYS_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_MLO $LUMISYS_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_CC $LUMISYS_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_CC $LUMISYS_OD $scalerange -8bit -outmicrons $1
+   else if({$institutioncode} == 'C') then
+   #   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from SHH."
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_MLO $LUMISYS_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_MLO $LUMISYS_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_CC $LUMISYS_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_CC $LUMISYS_OD $scalerange -8bit -outmicrons $1
+   else if({$institutioncode} == 'D') then
+   #   echo "The images were scanned on the HOWTEK scanner at ISMD and were from WU."
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_MLO $ISMD_HOWTEK_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_MLO $ISMD_HOWTEK_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view LEFT_CC $ISMD_HOWTEK_OD $scalerange -8bit -outmicrons $1
+      {$MAMMOCODEDIR}/image/mkimage -ics $ics_file -view RIGHT_CC $ISMD_HOWTEK_OD $scalerange -8bit -outmicrons $1
+   endif
+
+   \rm *.1
+   cd ..
+
+end
+# End of script make_reduced_images

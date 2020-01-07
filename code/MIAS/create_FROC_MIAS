@@ -1,0 +1,121 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: create_FROC_MIAS
+# PURPOSE: This script automates the performance evaluation for a set of cases.
+# It must reside in the MIAS code directory, but should be run from a directory
+# containing a set of detections and ground truth files for MIAS cases.
+# There are no arguments to this script.
+#
+# This script is currently configured to use a fixed number of detections
+# per image from the detection file (with this fixed number varied to
+# sweep out the FROC curve). The suspiciousness threshold is set
+# to zero so no detections in the detection file are skipped for not having
+# a high enough suspiciousness value.
+#
+# This script is configured to count all ground truth regions.
+#
+# The script is also configured to count the first detection in a ground truth
+# region as a true positive detection and skip all other detections that match
+# the ground truth region (e.g. they are not counted as false positives).
+#
+# You can see that this performance evaluation software is very flexible.
+# Please note that if you are assessing the performance of your own algorithms
+# with the goal of comparing the performance to another algorithm, you must
+# configure this script identically for both perfomance assessments.
+#
+# Several files are output. They are:
+#
+#    performance_#.txt   where 1<=#=NUMDET
+#    performance.txt     This file has the data you can plot to make the
+#                        FROC curve.
+#
+# Please note that if you have any of these files when you run the script,
+# THEY WILL BE DELETED!!!
+#
+# NAME: Michael Heath, University of South Florida
+# DATE: 6/9/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Set up a the upper limit of the maximum number of detections we will use
+# from each detection file. We are going to use a variable that goes from
+# 1..NUMDET to sweep out an FROC curve. We will not be changing the
+# suspiciousness threshold at all. Another way to sweep out an FROC curve
+# would be to use a range of suspthresh values instead of a range of
+# maximum number of detections per image. This decision is up to the
+# person evaluating the algorithm. The decision must be made before evaluating
+# an algorithm using the test data because changing the performance method to
+# obtain a better performance would clearly be a bad methodology.
+#-------------------------------------------------------------------------------
+set NUMDET = 20
+set suspthresh = '0.0'
+
+#-------------------------------------------------------------------------------
+# Check for files named performance.txt and performance_#.txt 1<=#<=NUMDET. If
+# these file are present, DELETE THEM!!!
+#-------------------------------------------------------------------------------
+set maxdet = 1
+while($maxdet <= $NUMDET)
+  \rm performance_{$maxdet}.txt >& /dev/null
+  set maxdet = `expr "$maxdet" + 1`
+end
+\rm performance.txt >& /dev/null
+
+#-------------------------------------------------------------------------------
+# Run the performance evaluation on each case using a range of maximum
+# allowable detections from 1 to NUMDET for image. This loop will create
+# one file for each value of maxdet. Note: you could run the performance
+# evaluation just looking for calcifications, spiculated masses, or
+# masses and calcifications by substituting the appropriate line listed below.
+#-------------------------------------------------------------------------------
+set maxdet = 1
+while($maxdet <= $NUMDET)
+
+  foreach x (`ls mdb*.det`)
+
+      set gtfilename = `echo $x | tr "_" " " | awk '{print $1 ".gt"}'`
+
+#      echo $x $gtfilename
+
+      {$MAMMOCODEDIR}/MIAS/MIASeval -gt $gtfilename -det $x -max $maxdet -st $suspthresh  >> performance_{$maxdet}.txt
+
+  end
+
+  set maxdet = `expr "$maxdet" + 1`
+end
+
+#-------------------------------------------------------------------------------
+# Calculate the true positive fraction and average number of false positives
+# per image for each value of maxdet.
+#-------------------------------------------------------------------------------
+echo "IMAGES SUMTRUEPOS SUMFALSEPOS SUMFALSENEG SUMTP+SUMFN TRUEPOSFRACT NUMFPPERIMAGE" >> performance.txt
+set maxdet = 1
+while($maxdet <= $NUMDET)
+
+   cat performance_{$maxdet}.txt | awk '{tp+=$1}{fp+=$2}{fn+=$3}{cnt+=1}END{if((tp+fn) != 0) {printf "%6s %10s %11s %11s %11s %12s %13s\n", cnt, tp, fp, fn, tp+fn, tp/(tp+fn), fp/cnt} else {printf "%6s %10s %11s %11s %11s %12s %13s\n", cnt, tp, fp, fn, tp+fn, 0, fp/cnt}}' >> performance.txt
+
+  set maxdet = `expr "$maxdet" + 1`
+end
+
+
+# end of script create_FROC_MIAS

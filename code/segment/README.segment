@@ -1,0 +1,56 @@
+********************************************************************************
+* File: README.segment
+* Purpose: To briefly describe the contents of this directory.
+* Name: Michael Heath, University of South Florida
+* Date: 6/9/2000
+* Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+********************************************************************************
+This directory contains code for segmenting the breast region in a mammogram.
+I attempted to make the code general so people could apply it to images that
+came from sources other than DDSM. The output from the program is a file with
+the extension .sgt that contains the breast boundary as a polygon of vertices
+specified in the resolution of the LJPEG image it was derived from.
+
+Some lines pulled out of a segmentation file produced by the code are listed
+here.
+
+2431 4966
+0.000000 0.000000 0.000000 0.000000
+100
+794.915649 2561.406738
+808.191528 2455.785156
+828.385925 2360.208496
+[ many more lines of vertices are here]
+791.733704 2671.450195
+
+The format can be described as follows:
+
+The two values on the first line are the number of columns and rows for an
+image that could be used to plot the polygon of coordinates. These are
+in fact the dimensions of the image from the DDSM database from which the
+beast segmentation was computed. The four numbers on the second line are
+placeholders for data that will be placed there in a future version of
+this software. For now they will always be zeros.
+
+The integer value on the next line specifies the number of vertices in the
+breast boundary polygon. This number of lines will follow in the file with
+each specifying a point (vertex) of the polygon as a (column, row) coordinate.
+
+If you want some feedback to show the segmented region in the images, you
+can use the optional -sketchres flag. This will output an image of the scan
+converted breast segmentation polygon as an image. The ascii file containing
+the polygon of the segmented region will still be produced when this flag
+is used.
+
+Notes:
+On 4/17/2000 the read_detection file was modified to allow the reading
+of the coordinates of the last detection in the file. Previously, the
+position was incorrect. It was actually the second to last position. This
+change fixed this bug. This probably has a little effect on the overall
+system because the last listed detection is the least suspicious one. Still,
+it was an error, and it was fixed.
+
+Also, code was added to compute the major axis of the breast. The start
+and end points of the breast are now written to the segmentation file. The
+segmentation file format has not changed as there were placeholders for
+those values already stored in the file.

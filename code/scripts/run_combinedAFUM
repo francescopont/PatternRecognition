@@ -1,0 +1,46 @@
+#!/bin/tcsh -f
+################################################################################
+# FILE: run_combinedAFUM
+# PURPOSE: This script automates the entire detection and performance
+# evaluation for a set of cases. It applies the AFUM algorithm and measures
+# it's performance using both a fixed number of detections per image and
+# a suspiciousness threshold. The combination of suspicion between projections
+# is then done and the performance of that approach is measured using both
+# approaches (fixed detections and supiciousness thresholds).
+#
+# NAME: Michael Heath, University of South Florida
+# DATE: 6/9/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# If the AFUM algorithm has already been run, the next line can be commented out
+# to significantly speed up this process.
+#-------------------------------------------------------------------------------
+{$MAMMOCODEDIR}/scripts/detect_and_FROC_mass
+# This is called from detect_and_FROC_mass {$MAMMOCODEDIR}/scripts/create_FROC_mass
+{$MAMMOCODEDIR}/scripts/create_FROC_mass_susp
+{$MAMMOCODEDIR}/scripts/run_augment_suspicion 0.03125 1.2 4
+{$MAMMOCODEDIR}/scripts/create_FROC_mass_aug
+{$MAMMOCODEDIR}/scripts/create_FROC_mass_aug_susp
+
+# end of script run_combinedAFUM

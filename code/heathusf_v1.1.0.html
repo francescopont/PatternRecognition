@@ -1,0 +1,353 @@
+<HTML>
+<HEAD> <TITLE>Mammography Software by Michael Heath</TITLE> </HEAD>
+
+<BODY bgcolor="#FFFBF0">
+<BASEFONT SIZE=3>
+
+<IMG SRC="logo.gif">
+
+<BR>
+<BR>
+
+<CENTER>
+<TABLE BORDER=10 CELLPADDING=15>
+<TR><TD BGCOLOR="#007B21" ALIGN=CENTER>
+<FONT SIZE=+2 COLOR="#FFE700">
+<B>Mammography Software by Michael Heath<br>
+Computer Vision Laboratory<br>
+University of South Florida<br>June 2000</B></br>
+Version: 1.1.0<br>
+</FONT>
+</TD></TR>
+</TABLE>
+</CENTER>
+
+</BR>
+
+<B>Preface</B>
+<P>
+The purpose of this web page is to describe some software for computer aided detection
+of cancer in mammograms that I have developed at the University of South Florida.
+I am posting this software on the world wide web to encourage and simplify the
+quantitative performance of computer aided detection algorithms. The programs
+included in this software were developed using mammography data in the
+<A HREF="../Database.html">Digital Database for
+Screening Mammography</A> (DDSM) at the <A HREF="http://www.usf.edu">University of South
+Florida</A>. This software provides many tools for manipulating and displaying images from
+the DDSM database as well as providing a mass detection algorithm and CAD performance
+evaluation tools.
+</P>
+
+<B>Feedback</B>
+<P>
+If you use this software and have any constructive comments on it, please send them to
+me (<A HREF="MAILTO:heath@csee.usf.edu">heath@csee.usf.edu</A>). Even if you are just
+simply trying out the software, I would appreciate a short note from you. This
+feedback will let me know if the time I spent releaseing this software was well spent and
+will give me an indication as to whether I should invest more time on this work in the
+future.
+</P>
+
+<B>Disclaimer</B>
+<P>
+This code is free to use, and distribute as long as it is complete and lists a
+reference to this web site
+(<A HREF="../software/heathusf.html">http://marathon.csee.usf.edu/Mammography/software/heathusf.html</A>).
+It should be understood that this code SHOULD NOT BE USED IN ANY MEDICAL SYSTEM,
+IS FOR USE AS IS, MAY NOT BE SOLD, and COMES WITHOUT A WARRANTY OF ANY KIND.
+The purpose of distributing this code is to facilitate performance evaluation and
+comparative work in CAD for mammography. This code is the property of the University
+of South Florida and is copyrighted by Michael D. Heath and Dr. Kevin W. Bowyer.
+</P>
+
+<B>Simply Using the Software</B>
+
+<P>
+This section describes some steps you can follow to use the mass detection
+software. I will assume that your hardware and software are the same as mine
+(I am using a Sun workstation running SunOS 5.6). If you are running another
+version of SunOS, Linux or some other version of UNIX, you should be able to
+get this code working on your system without too much effort. I made this software
+run on my PC at home (Pentium 233, 64MB of RAM) running Caldera OpenLinux after
+small investment of time (Hint: see code/compression/JPEG/PVRG/jpegdir/IMPORTANT_NOTE_BY_MIKE_HEATH and
+set the parameter to swap the bytes in functions that read DDSM images).
+</P>
+
+<P>
+I am assuming that your home directory is ~yourhome and that you down load
+the software <A HREF="ftp://marathon.csee.usf.edu/pub/heathusf/heathusf_v1.1.0.tar.gz">heathusf_v1.1.0.tar.gz</A>
+(this replaces the older version
+<A HREF="ftp://marathon.csee.usf.edu/pub/heathusf/heathusf_v1.0.0.tar.gz">heathusf_v1.0.0.tar.gz</A>) into
+a directory named ~yourhome/heathusf. Uncompress and untar the software and compile
+the programs by using the following commands:
+<CENTER><PRE><B>cd ~yourhome/heathusf</B></PRE></CENTER>
+<CENTER><PRE><B>gunzip -c heathusf_v1.0.0.tar.gz | tar -xvf -</B></PRE></CENTER>
+<CENTER><PRE><B>cd code</B></PRE></CENTER>
+<CENTER><PRE><B>build_heathusf</B></PRE></CENTER>
+</P>
+
+<P>
+You will need to down load some cases of data from the DDSM to have some data to process.
+I will assume that the data is on your system in the directory /tmp/yourhome. In
+that directory you will need to have cases of data in subdirectories named case####
+(i.e. <A HREF="ftp://figment.csee.usf.edu/pub/DDSM/cases/cancers/cancer_10/case1622">case1622</A>).
+From within the directory /tmp/yourhome type:
+<CENTER><PRE><B>~yourhome/heathusf/code/scripts/detect_and_FROC_mass</B></PRE></CENTER>
+This will run the mass detection algorithm on each case and create a file named
+performance.txt. That file will have the true positive fraction and the average
+number of false positives per image as the last two columns of data in the file.
+This takes around 20 minutes per case of data on my system (Sun Ultra30) so be prepared
+to wait a while if you are running on multiple cases of data or if your computer
+is not as fast as mine.
+</P>
+
+<B>Software Organization</B>
+
+<P>
+This section is for those of you who want to know a little more about the software,
+how it is organized and what tools are there for you to use.
+</P>
+
+<P>
+All of the software was written in 'C' and was developed on a Sun workstation
+running SunOS 5.6 using the compiler gcc. The software is organized into a
+common directory where a library of functions is built and into
+several application directories. Scripts (tcsh) are used to handle the flow
+of processing because this allows the automated processing of large sets of
+cases with one command.
+</P>
+
+<P>
+Below is a table describing some of the scripts I have written. The puspose of
+these scripts is to automate the entire mass detection and evalutation
+process to allow others to duplicate the results I obtained with this algorithm and
+to provide example scripts so others can learn how to write their own scripts
+that use the programs in this package.
+</P>
+
+<TABLE BORDER=2>
+<TR><TH>Macro Level Script</TH><TH>Description</TH></TR>
+
+<TR>
+<TD>runAFUMcase</TD>
+<TD> This script will run a mass detection program on a case from the DDSM database.
+A file will be created for each mammogram containing a list of potential detection
+sites in the image with detections listed in decreasing order of suspicion. The
+script should be run from a directory where the case to process is in an immediate
+subdirectory named case####. In processing the case, images are decompressed, the
+breast boundary is segmented, a feature image is produced, the detection files are
+created and the decompressed images are deleted.</TD>
+</TR>
+
+<TR>
+<TD>create_FROC_mass</TD>
+<TD> This script will run the performance evaluation program (DDSMeval) on each
+case of from the DDSM (that is in a current subdirectory) and will output the data
+you can plot to form an FROC curve. The script will use all of the detection
+files in each directory. These could be files produced by your own CAD algorithm
+or they could be files produced by the script runAFUMcase. To compare results
+from your CAD algorithm with mine you must run the scripts as they are currently
+configured and must not use the test data in any way until you are actually
+evaluating the performance of your algorithm (You can do this only once. Otherwise
+it is not fair to compare the performance of your algorithm to mine because
+you have used the test data as training data.).</TD>
+</TR>
+
+<TR>
+<TD>detect_and_FROC_mass</TD>
+<TD> This script automates the entire detection and performance evaluation. Just
+place yourself in a directory with a set of cases in its subdirectories and then
+run this script. It may take hours or days to run a large set of cases on your
+computer. This script calls both the runAFUMcase and create_FROC_mass scripts.</TD>
+</TR>
+
+<TR>
+<TD>make_reduced_images</TD>
+<TD> This script will make 8 bit images of all the DDSM images in cases that
+are in subdirectories of the directory where the script is run. The script is
+configured to output 8bit PGM files scaled with optical densities in the
+range 3.0 to 0.05. The images will be created at any resolution you specify that
+is greater than or equal to the original resolution of the DDSM images. One could
+easily reconfigure the script to make images at other resolutions, in 16bits, in
+TIFF format or with other rescalings of pixel values.</TD>
+</TR>
+
+</TABLE>
+
+<br>
+
+<P>
+Below is a table that provides a list of the programs that are in this package.
+Next to each is a short description of what each program does. Once you have
+downloaded the package and compiled it on your system, you can run any program
+with no arguments and get information on how to run that program.
+</P>
+
+<TABLE BORDER=2>
+<TR><TH>Program</TH><TH>Description</TH></TR>
+
+<TR>
+<TD>jpeg</TD>
+<TD>This program can decompress a lossless compressed mammogram in the DDSM database.</TD>
+</TR>
+
+<TR>
+<TD>breastsegment</TD>
+<TD>This program will segment the breast from an image and produce an ASCII
+file of the polygon outlining the breast region.</TD>
+</TR>
+
+<TR>
+<TD>afumfeature</TD>
+<TD>This program will produce a probability of suspiciousness image using a novel
+Average Fraction (of pixels) Under the Minimum filter.</TD>
+</TR>
+
+<TR>
+<TD>detect</TD>
+<TD>This program will produce a detection file listing a set of possible detection sites
+in decreasing order of suspicion. Any program that will use this file must make the decision
+regarding which subset of detections to use from the file. Two possible methods of selecting
+a subset are to take at most some maximum number of detections (starting with the first one)
+or to take all detections with a suspiciousness value higher than some threshold suspiciousness value.</TD>
+</TR>
+
+<TR>
+<TD>mkimage</TD>
+<TD>This program will produce a PGM or TIFF image in 8 or 16 bits at any given
+resolution from a decompressed LJPEG.1 image from the DDSM database. Options
+are provided for rescaling the image in gray values or in optical density values.
+</TD>
+</TR>
+
+<TR>
+<TD>mktemplate</TD>
+<TD>This program will create a binary or labeled image from a DDSM ground truth
+file (.OVERLAY) at any specified resolution. Many options allow the user to
+specify the desired lesion type and descriptive properties as well as the pathology
+of the lesions that are rendered in the template image. The image can be saved in
+either PGM or TIFF format.
+</TD>
+</TR>
+
+<TR>
+<TD>drawimage</TD>
+<TD>This program will create an image to visualize ground truth regions and or detected
+regions as well as the breast segmentation. The selected items are overlayed on an
+existing 8bit PGM image (that could have been created with mkimage). Many options
+allow the user to specify the desired lesion type and descriptive properties as well
+as the pathology of the lesions that are rendered in the template image. Other options
+allow the user to specify the maximum number of detections and the suspiciousness threshold
+to use in determining which possible detections (present in the detection file) to plot
+on the image. This can be used to visualize the detections and verify the performance of
+an algorithm.
+</TD>
+</TR>
+
+<TR>
+<TD>DDSMeval</TD>
+<TD>This is a performance evaluation tool that will compute the number of true positive (TP)
+detections, the number of false positive (FP) detections and the number of false negative (FN)
+detections for an image from the DDSM database given a detection file. Many options
+allow the user to specify the desired lesion type and descriptive properties as well
+as the pathology of the lesions that are to count as lesions that should be detected. Other options
+allow the user to specify the maximum number of detections and the suspiciousness threshold
+to use in determining which possible detections (present in the detection file) to declare
+as actual detections to use. By default, all BENIGN and MALIGNANT lesions of the lesions
+that match the description are used.
+</TD>
+</TR>
+
+<TR>
+<TD>MIAS</TD>
+<TD>This is the name of a directory that contains software for pre-processing images and
+ground truth from the MIAS database for processing by the AFUM mass detection algorithm.
+The directory also contains software for evaluating the performance of the mass detection
+algorithm. A script named "evalAFUM_MIAS" in this directory automates the entire pre-processing,
+mass detection and performance evaluation process for two subsets of images from the
+MIAS database. The images are not provided with the software. They must be aquired by
+the user. The output from this process is very similar to the output from running the script
+detect_and_FROC_mass on cases from the DDSM database. The purpose of this software is to
+allow indpendent verification of the results published in the paper "Mass Detection by
+Relative Image Intensity" in the proceeding of the 5th International Workshop on Digital
+Mammography. (The proceedings are to be published by Medical Physics Publishers and are
+expected to be available in September 2000).
+</TD>
+</TR>
+
+<TR>
+<TD>combinesusp</TD>
+<TD>This program allows the suspicion for masses obtained by the AFUM mass detection program
+to be combined in MLO and CC projections to try and improve the performance of the
+detection algorithm. The program processes two detection files and creates new detection
+files that can be used to obtain a new performance estimate.
+</TD>
+</TR>
+
+<TR>
+<TD>MammoView</TD>
+<TD>This is a program written with the X-lib library to display mammograms. It can
+display images from the DDSM database by automatically decompressing the images
+or can display images in a variety of formats (e.g. generic with user specified rows, cols,
+header bytes and bytes per pixel, ".dcm", ".pgm") . It is very general purpose because it
+can handle images that are 8 or 16-bits. The program can also overlay the ground truth
+for DDSM images, the breast segmentation produced by the program
+breastsegment and detections in the format produced by the program detect. The program
+is very flexible because of the many command line options that can be specified by the user.
+Note that an environment variable must be set for the program to access the jpeg program
+to decompress "LJPEG" images. The command setenv JPEG_PROGRAM "/home/captiva1/heath/bin/jpeg"
+works on my system because that is where I placed the jpeg program.
+
+<TABLE BORDER=2>
+<TR>
+<TD><IMG SRC="LMLO.jpg"></TD>
+<TD><IMG SRC="RMLO.jpg"></TD>
+<TD><IMG SRC="LCC.jpg"></TD>
+<TD><IMG SRC="RCC.jpg"></TD>
+<TD>
+Examples of the four mammograms in case1622 displayed with MammoView. The images are displayed
+here at a resolution of 1258 microns so they will fit in this small area. The breast boundary
+(in orange) and the major axis (in yellow) were found by the breastsegment program. The
+detections were generated using the Average Fraction Under the Minimum algorithm and are displayed
+with 5mm circles (in red, green, blue and cyan). The ground truth regions
+are displayed in red.
+</TD>
+</TR>
+<TR>
+<TD COLSPAN=2 ALIGN=CENTER><IMG SRC="LCCroi.jpg"></TD>
+<TD COLSPAN=2 ALIGN=CENTER><IMG SRC="LMLOroi.jpg"></TD>
+<TD>
+Examples of ROI's from the LMLO and LCC images of case1622 displayed with MammoView. The detection
+locations (not segmentations) are displayed as 5mm red circles indicating they were the most
+suspicious locations for masses. These ROI's are displayed with a resoltuion of 174 microns.
+</TD>
+</TR>
+</TABLE>
+</TD>
+</TR>
+
+</TABLE>
+<br>
+
+<P>
+<FONT COLOR="#FF0000">A paper on this algorithm titled "Mass Detection by Relative Image Intensity"
+has been submitted to and accepted for the
+<A HREF="http://www.sunnybrook.on.ca/~iwdm2000/">5th International Workshop on Digital
+Mammography</A> to be held in Toronto, Canada during June 11-14, 2000.
+The paper will appear in the proceedings of the conference. Anyone wishing to use this
+software for performance comparision or in some other regard may reference that paper
+to reference the source of this algorithm and software.</FONT>
+</P>
+
+<HR>
+<FONT SIZE=-1>
+Michael Heath, <A HREF="http://www.csee.usf.edu">Computer Vision Laboratory</A>,
+<A HREF="http://www.usf.edu">University of South Florida</A><br>
+Please direct any questions or comments to <A HREF=MAILTO:heath@csee.usf.edu">heath@csee.usf.edu</A>.<br>
+Click <A HREF="../software/heathusf_v1.1.0.html">here</A> to go to
+this web page online.
+</FONT>
+
+</BODY>
+</HTML>
+

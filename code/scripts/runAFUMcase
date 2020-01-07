@@ -1,0 +1,205 @@
+#!/bin/tcsh -f
+################################################################################
+# File: runAFUMcase
+# Purpose: This script will process a single case with the AFUM detection
+# algorithm. This case can be any case from the DDSM database. The case must
+# be in a subdirectory of your current directory when you run the script.
+# Name: Michael Heath, University of South Florida
+# Date: 1/13/2000
+# Copyright: Michael Heath and Dr. Kevin Bowyer 2000
+################################################################################
+
+#-------------------------------------------------------------------------------
+# Check the command line arguments.
+#-------------------------------------------------------------------------------
+set number_of_arguments = $#
+
+if($number_of_arguments != 1) then
+   echo " "
+   echo "<USAGE> runAFUMcase case####"
+   echo " "
+   exit
+endif
+
+setenv casedir $1
+
+#-------------------------------------------------------------------------------
+# Set variables that can be used to map to optical density. These are the
+# calibration functions for the four scanners used in the DDSM database.
+#-------------------------------------------------------------------------------
+set DBA_OD = '-log10 4.26700423014133 -0.90303289757264'
+set LUMISYS_OD = '-linear 4.05977749300340 -0.00099080941710'
+set ISMD_HOWTEK_OD = '-linear 3.96604095240593 -0.00099055807612'
+set MGH_HOWTEK_OD = '-linear 3.78928997845071 -0.00094568009377'
+
+#-------------------------------------------------------------------------------
+# Check to see if the environment variable MAMMOCODEDIR is set. If not, set it.
+#-------------------------------------------------------------------------------
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   set thisdir = `pwd`
+   set mdirectory = `dirname $0`
+   cd $mdirectory
+   set mcodedir = `pwd`
+   set mammocodedir = `dirname $mcodedir`
+   cd $thisdir
+   setenv MAMMOCODEDIR $mammocodedir
+endif
+set isMAMMOCODEDIRset = `setenv | grep -c MAMMOCODEDIR`
+if($isMAMMOCODEDIRset == 0) then
+   echo "The environment variable MAMMOCODEDIR is not set properly."
+   exit
+endif
+
+#-------------------------------------------------------------------------------
+# Make sure the case directory exists that the user wants to run the script on.
+#-------------------------------------------------------------------------------
+if( ! (-s $casedir ) ) then
+echo "Error! " $casedir " not found by runAFUMcase."
+exit
+endif
+
+cd $casedir
+
+#-------------------------------------------------------------------------------
+# Look for the .ics file.
+#-------------------------------------------------------------------------------
+set case_exists = `ls -1 *.ics >& /dev/null `
+if ($? != 0) then
+echo "Error no ICS (.ics) file was found in" {$casedir} "."
+cd ..
+exit
+endif
+set ics_file = `ls -1 *.ics`
+# echo "Will use " {$ics_file} "."
+
+#-------------------------------------------------------------------------------
+# Get the scanner from the ICS file.
+#-------------------------------------------------------------------------------
+set scanner = `grep DIGITIZER {$ics_file} | awk '{print $2}'`
+#echo "The scanner for this case is " {$scanner} "."
+
+#-------------------------------------------------------------------------------
+# Get the institution that the case was from.
+#-------------------------------------------------------------------------------
+set institutioncode = `grep filename {$ics_file} | tr "-" " " | awk '{print $2}'`
+#echo "The institution code is " {$institutioncode} "."
+
+#if({$institutioncode} == 'A') then
+#   echo "The case is from Massachussetts General Hospital."
+#else if({$institutioncode} == 'B') then
+#   echo "The case is from Wake Forest University School of Medicine."
+#else if({$institutioncode} == 'C') then
+#   echo "The case is from Sacred Heart Hospital."
+#else if({$institutioncode} == 'D') then
+#   echo "The case is from Washington University."
+#endif
+
+#-------------------------------------------------------------------------------
+# Decompress the images in the case.
+#-------------------------------------------------------------------------------
+{$MAMMOCODEDIR}/compression/case_decompress
+
+#-------------------------------------------------------------------------------
+# Segment the breast in the four images in the case. Then run the AFUM filter
+# on each of the four images. Finally, run the detection program on the filtered
+# images. This will produce one detection (.det) file for each image.
+#-------------------------------------------------------------------------------
+if({$institutioncode} == 'A') then
+   if({$scanner} == "DBA") then
+#      echo "The images were scanned on the DBA scanner at MGH."
+
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_MLO -thresh 3.0 -uthresh 0.10 $DBA_OD
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_MLO -thresh 3.0 -uthresh 0.10 $DBA_OD
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_CC -thresh 3.0 -uthresh 0.10 $DBA_OD
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_CC -thresh 3.0 -uthresh 0.10 $DBA_OD
+
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_MLO $DBA_OD
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_MLO $DBA_OD
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_CC $DBA_OD
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_CC $DBA_OD
+
+      {$MAMMOCODEDIR}/detect/detect *LEFT_MLO*.afum.pgm *LEFT_MLO*.polyscan.pgm 294.0
+      {$MAMMOCODEDIR}/detect/detect *RIGHT_MLO*.afum.pgm *RIGHT_MLO*.polyscan.pgm 294.0
+      {$MAMMOCODEDIR}/detect/detect *LEFT_CC*.afum.pgm *LEFT_CC*.polyscan.pgm 294.0
+      {$MAMMOCODEDIR}/detect/detect *RIGHT_CC*.afum.pgm *RIGHT_CC*.polyscan.pgm 294.0
+
+   else if({$scanner} == "HOWTEK") then
+#      echo "The images were scanned on the HOWTEK scanner at MGH."
+
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_MLO -thresh 3.0 -uthresh 0.10 $MGH_HOWTEK_OD
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_MLO -thresh 3.0 -uthresh 0.10 $MGH_HOWTEK_OD
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_CC -thresh 3.0 -uthresh 0.10 $MGH_HOWTEK_OD
+      {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_CC -thresh 3.0 -uthresh 0.10 $MGH_HOWTEK_OD
+
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_MLO $MGH_HOWTEK_OD
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_MLO $MGH_HOWTEK_OD
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_CC $MGH_HOWTEK_OD
+      {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_CC $MGH_HOWTEK_OD
+
+      {$MAMMOCODEDIR}/detect/detect *LEFT_MLO*.afum.pgm *LEFT_MLO*.polyscan.pgm 304.5
+      {$MAMMOCODEDIR}/detect/detect *RIGHT_MLO*.afum.pgm *RIGHT_MLO*.polyscan.pgm 304.5
+      {$MAMMOCODEDIR}/detect/detect *LEFT_CC*.afum.pgm *LEFT_CC*.polyscan.pgm 304.5
+      {$MAMMOCODEDIR}/detect/detect *RIGHT_CC*.afum.pgm *RIGHT_CC*.polyscan.pgm 304.5
+
+   endif
+else if({$institutioncode} == 'B') then
+#   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from WFUSM."
+
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_MLO -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_MLO -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_CC -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_CC -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_MLO $LUMISYS_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_MLO $LUMISYS_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_CC $LUMISYS_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_CC $LUMISYS_OD
+
+   {$MAMMOCODEDIR}/detect/detect *LEFT_MLO*.afum.pgm *LEFT_MLO*.polyscan.pgm 300.0
+   {$MAMMOCODEDIR}/detect/detect *RIGHT_MLO*.afum.pgm *RIGHT_MLO*.polyscan.pgm 300.0
+   {$MAMMOCODEDIR}/detect/detect *LEFT_CC*.afum.pgm *LEFT_CC*.polyscan.pgm 300.0
+   {$MAMMOCODEDIR}/detect/detect *RIGHT_CC*.afum.pgm *RIGHT_CC*.polyscan.pgm 300.0
+
+else if({$institutioncode} == 'C') then
+#   echo "The images were scanned on the LUMISYS scanner at WFUSM and were from SHH."
+
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_MLO -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_MLO -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_CC -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_CC -thresh 3.0 -uthresh 0.10 $LUMISYS_OD
+
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_MLO $LUMISYS_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_MLO $LUMISYS_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_CC $LUMISYS_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_CC $LUMISYS_OD
+
+   {$MAMMOCODEDIR}/detect/detect *LEFT_MLO*.afum.pgm *LEFT_MLO*.polyscan.pgm 300.0
+   {$MAMMOCODEDIR}/detect/detect *RIGHT_MLO*.afum.pgm *RIGHT_MLO*.polyscan.pgm 300.0
+   {$MAMMOCODEDIR}/detect/detect *LEFT_CC*.afum.pgm *LEFT_CC*.polyscan.pgm 300.0
+   {$MAMMOCODEDIR}/detect/detect *RIGHT_CC*.afum.pgm *RIGHT_CC*.polyscan.pgm 300.0
+
+else if({$institutioncode} == 'D') then
+#   echo "The images were scanned on the HOWTEK scanner at ISMD and were from WU."
+
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_MLO -thresh 3.0 -uthresh 0.10 $ISMD_HOWTEK_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_MLO -thresh 3.0 -uthresh 0.10 $ISMD_HOWTEK_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view LEFT_CC -thresh 3.0 -uthresh 0.10 $ISMD_HOWTEK_OD
+   {$MAMMOCODEDIR}/segment/breastsegment -ics $ics_file -view RIGHT_CC -thresh 3.0 -uthresh 0.10 $ISMD_HOWTEK_OD
+
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_MLO $ISMD_HOWTEK_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_MLO $ISMD_HOWTEK_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view LEFT_CC $ISMD_HOWTEK_OD
+   {$MAMMOCODEDIR}/AFUM/afumfeature -ics $ics_file -view RIGHT_CC $ISMD_HOWTEK_OD
+
+   {$MAMMOCODEDIR}/detect/detect *LEFT_MLO*.afum.pgm *LEFT_MLO*.polyscan.pgm 304.5
+   {$MAMMOCODEDIR}/detect/detect *RIGHT_MLO*.afum.pgm *RIGHT_MLO*.polyscan.pgm 304.5
+   {$MAMMOCODEDIR}/detect/detect *LEFT_CC*.afum.pgm *LEFT_CC*.polyscan.pgm 304.5
+   {$MAMMOCODEDIR}/detect/detect *RIGHT_CC*.afum.pgm *RIGHT_CC*.polyscan.pgm 304.5
+
+endif
+
+\rm *.1
+cd ..
+
+# End of script runAFUMcase.
