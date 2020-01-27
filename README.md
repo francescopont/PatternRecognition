@@ -4,7 +4,7 @@ This repository contains all the relevant material of the Pattern Recognition pr
 
 Surname | Name | Student ID 
 ------------ | ------------- | ------------- 
-Heida | harmen | 4271483 
+Heida | Harmen | 4271483 
 Heuvelmans | Job | 5753066
 Pontiggia | Francesco | 6925480
 Xin | Lan | 6690165
