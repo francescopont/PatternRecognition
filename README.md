@@ -1,5 +1,5 @@
 # PatternRecognition
-This repository contains all the relevant material of the Pattern Recognition project, group 18, academic year 2019/2020, Utrecht University.
+This repository contains all the relevant material of the Pattern Recognition project, group 18, academic year 2019/2020, Utrecht University. All the code has been written in Python.
 ## Group members
 
 Surname | Name | Student ID 
